@@ -260,11 +260,16 @@ function parseFicha(id, html) {
   else if (/reservad/i.test(badge)) status = 'reservada';
   if (isSold) w.push('marcada VENDIDA en el título');
 
-  // Fotos: todas las apariciones de <id8>-NN.jpg en la página
+  // Fotos: todas las apariciones de <id8>-NN.jpg en la página. El directorio prefijo NO
+  // son los primeros 3 dígitos del id de 8 (eso rompe con ids de 5/6 cifras, que son casi
+  // todos): es el id llevado a 6 cifras (con ceros a la izquierda) y ahí sí los primeros 3
+  // — probado contra la carpeta real (568550 -> "568", 77574 -> "077", no "005"/"077" del
+  // id8). "_b" es la variante que la propia página referencia siempre (confirmado que
+  // resuelve); no asumir que "prop_new" a secas existe para todos los ids.
   const id8 = String(id).padStart(8, '0');
   const nums = [...new Set([...html.matchAll(new RegExp(`${id8}-(\\d{2})\\.jpg`, 'g'))].map((m) => m[1]))].sort();
-  const pre = id8.slice(0, 3);
-  const photos = nums.map((n) => `https://staticbp.com/img/prop_new/${pre}/${id8}-${n}.jpg`);
+  const pre = String(id).padStart(6, '0').slice(0, 3);
+  const photos = nums.map((n) => `https://staticbp.com/img/prop_new_b/${pre}/${id8}-${n}.jpg`);
   if (!photos.length) w.push('sin fotos');
 
   return {
@@ -372,7 +377,7 @@ async function buildSql() {
 VALUES ('agency', ${AGENCY_ID}, ${sqlNum(x.branch_id)}, ${sqlStr(x.operation)}, ${sqlStr(x.kind)}, ${sqlStr(x.title)}, ${sqlStr(x.description)},
    ${sqlNum(x.price)}, ${sqlStr(x.currency)}, ${sqlStr(x.price_period || null)}, ${sqlNum(x.area_m2)}, ${sqlNum(x.rooms)}, ${sqlNum(x.bathrooms)}, ${sqlNum(x.capacity)},
    ${sqlStr(amen)}, ${sqlStr(x.address)}, ${sqlStr(x.city)}, ${sqlStr(x.province)}, ${sqlNum(x.lat)}, ${sqlNum(x.lng)}, ${sqlStr(x.status)}, 1, ${sqlStr(x.external_url)})
-ON CONFLICT(external_url) DO UPDATE SET
+ON CONFLICT(external_url) WHERE external_url IS NOT NULL DO UPDATE SET
   branch_id=excluded.branch_id, operation=excluded.operation, kind=excluded.kind, title=excluded.title,
   description=excluded.description, price=excluded.price, currency=excluded.currency, price_period=excluded.price_period,
   area_m2=excluded.area_m2, rooms=excluded.rooms, bathrooms=excluded.bathrooms, capacity=excluded.capacity, amenities=excluded.amenities,
@@ -397,48 +402,122 @@ DELETE FROM properties WHERE external_url IS NULL;  -- cascade: property_media, 
   console.log(`✓ ${list.length} filas → ${SQL_OUT}`);
 }
 
+// NO_COLOR además de un strip manual: wrangler mete escapes ANSI en el banner ("[33m...")
+// que tienen "[" — sin sacarlos, buscar el primer "[" para arrancar a parsear JSON agarra
+// el del color, no el del array, y el parseo falla en silencio (vuelve un array vacío).
+const SPAWN_ENV = { ...process.env, NO_COLOR: '1', CI: '1' };
+const stripAnsi = (s) => s.replace(/\x1b\[[0-9;]*m/g, '');
+
+// `--command=<sql con espacios>` vía spawnSync+shell:true en Windows no queda quoteado:
+// node concatena los argv sin escapar (la propia deprecation warning lo dice), así que
+// cualquier SQL con espacios se parte en varios argumentos sueltos y wrangler tira el
+// help. Por eso todo pasa por `--file=` (un temporal), nunca por `--command=` con SQL real.
+let tmpSqlSeq = 0;
+function sqlToTempFile(sql) {
+  const p = resolve(WORKDIR, `tmp-query-${process.pid}-${tmpSqlSeq++}.sql`);
+  writeFileSync(p, sql);
+  return p;
+}
 function d1(sqlOrFile, { file = false } = {}) {
-  const a = ['wrangler', 'd1', 'execute', 'coopen-places-db', LOCAL, '--yes', file ? `--file=${sqlOrFile}` : `--command=${sqlOrFile}`];
-  const r = spawnSync('npx', a, { cwd: ROOT, encoding: 'utf8', shell: isWin });
+  const f = file ? sqlOrFile : sqlToTempFile(sqlOrFile);
+  const a = ['wrangler', 'd1', 'execute', 'coopen-places-db', LOCAL, '--yes', `--file=${f}`];
+  const r = spawnSync('npx', a, { cwd: ROOT, encoding: 'utf8', shell: isWin, maxBuffer: 1024 * 1024 * 64, env: SPAWN_ENV });
   if (r.status !== 0) throw new Error((r.stderr || r.stdout || '').split('\n').filter((l) => /error/i.test(l))[0] || 'd1 falló');
   return r.stdout || '';
 }
+// `--file=` corre en modo batch y wrangler devuelve un resumen (filas leídas/escritas),
+// no las filas — para leer datos hace falta `--command=`, así que acá SÍ hay que pelear
+// con el quoting: se arma UNA sola línea de comando (no un array de argv, que node no
+// escapa con shell:true) con el SQL entre comillas dobles.
 function d1json(sql) {
-  const a = ['wrangler', 'd1', 'execute', 'coopen-places-db', LOCAL, '--yes', '--json', `--command=${sql}`];
-  const r = spawnSync('npx', a, { cwd: ROOT, encoding: 'utf8', shell: isWin });
-  const i = (r.stdout || '').indexOf('[');
-  try { return JSON.parse(r.stdout.slice(i))[0].results; } catch { return []; }
+  const q = sql.replace(/"/g, '\\"');
+  const cmd = `npx wrangler d1 execute coopen-places-db ${LOCAL} --yes --json --command="${q}"`;
+  const r = spawnSync(cmd, { cwd: ROOT, shell: true, encoding: 'utf8', maxBuffer: 1024 * 1024 * 64, env: SPAWN_ENV });
+  const out = stripAnsi(r.stdout || '');
+  const i = out.indexOf('[');
+  try { return JSON.parse(out.slice(i))[0].results; }
+  catch { console.error('d1json: no pude parsear la respuesta de wrangler:\n' + (r.stderr || r.stdout || '').slice(0, 500)); return []; }
 }
-function r2put(key, buf) {
-  const tmp = resolve(WORKDIR, 'tmp.bin');
-  writeFileSync(tmp, buf);
-  const r = spawnSync('npx', ['wrangler', 'r2', 'object', 'put', `coopen-places-media/${key}`, LOCAL, `--file=${tmp}`, '--content-type=image/jpeg'], { cwd: ROOT, encoding: 'utf8', shell: isWin });
-  return r.status === 0;
+
+// Subir foto por foto con `wrangler r2 object put` (un subproceso por archivo) sería
+// impracticable a esta escala (~2.200 fotos): se llama directo a la API de Cloudflare
+// (el mismo endpoint que usa wrangler por dentro) desde este proceso, con concurrencia.
+function readToml(name) {
+  const txt = readFileSync(resolve(ROOT, 'wrangler.toml'), 'utf8');
+  const m = txt.match(new RegExp(`${name}\\s*=\\s*"([^"]+)"`));
+  return m ? m[1] : null;
+}
+const ACCOUNT_ID = readToml('account_id');
+const BUCKET = readToml('bucket_name');
+
+async function r2putApi(key, buf, contentType) {
+  const url = `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/r2/buckets/${BUCKET}/objects/${key.split('/').map(encodeURIComponent).join('/')}`;
+  const r = await fetch(url, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`, 'Content-Type': contentType },
+    body: buf,
+    signal: AbortSignal.timeout(30000),
+  });
+  if (!r.ok) throw new Error(`R2 put ${key} -> HTTP ${r.status}: ${(await r.text()).slice(0, 200)}`);
 }
 
 async function photos() {
+  if (!LOCAL.includes('local') && (!process.env.CLOUDFLARE_API_TOKEN || !ACCOUNT_ID || !BUCKET)) {
+    console.error('Faltan CLOUDFLARE_API_TOKEN / account_id / bucket_name (wrangler.toml) para subir a R2 remoto.');
+    process.exit(1);
+  }
   const list = JSON.parse(await readFile(LISTINGS, 'utf8')).filter((x) => !x.error && x.photo_count);
   const map = new Map(d1json('SELECT id, external_url FROM properties WHERE external_url IS NOT NULL').map((r) => [r.external_url, r.id]));
-  let up = 0, skipRows = 0;
+  console.log(`Propiedades con id resuelto: ${map.size}`);
+  if (!map.size) { console.error('No se resolvió ningún id — revisá la conexión a D1 antes de seguir.'); process.exit(1); }
+
+  // Armamos la cola completa de fotos a subir (todas las propiedades juntas) para poder
+  // subirlas con concurrencia real en vez de una por una en serie.
+  const queue = [];
+  let skipRows = 0;
   for (const x of list) {
     const pid = map.get(x.external_url);
     if (!pid) { skipRows++; continue; }
-    d1(`DELETE FROM property_media WHERE property_id = ${pid}`);
-    let sort = 0;
-    for (const url of x.photos) {
-      try {
-        const r = await fetch(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(20000) });
-        if (!r.ok) continue;
-        const key = `prop/${pid}/${String(sort + 1).padStart(2, '0')}.jpg`;
-        if (r2put(key, Buffer.from(await r.arrayBuffer()))) {
-          d1(`INSERT INTO property_media (property_id, r2_key, kind, sort) VALUES (${pid}, '${key}', 'photo', ${sort})`);
-          sort++; up++;
-        }
-      } catch { /* salta la foto */ }
-    }
-    process.stdout.write(`\r  ${x.external_url.split('/').pop()} → ${sort} fotos · ${up} subidas`);
+    x.photos.forEach((url, i) => queue.push({ pid, url, sort: i, key: `prop/${pid}/${String(i + 1).padStart(2, '0')}.jpg` }));
   }
-  process.stdout.write(`\n✓ ${up} fotos subidas${skipRows ? ` · ${skipRows} propiedades sin fila (corré 'sql' + migrate primero)` : ''}\n`);
+
+  const rows = []; // filas listas para el INSERT masivo
+  let done = 0, failed = 0;
+  const CONC = 10;
+  async function worker(items) {
+    for (const it of items) {
+      try {
+        const r = await fetch(it.url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(20000) });
+        if (!r.ok) throw new Error(`fetch HTTP ${r.status}`);
+        const buf = Buffer.from(await r.arrayBuffer());
+        if (LOCAL.includes('local')) {
+          const tmp = resolve(WORKDIR, `up-${it.pid}-${it.sort}.jpg`);
+          writeFileSync(tmp, buf);
+          const res = spawnSync('npx', ['wrangler', 'r2', 'object', 'put', `${BUCKET || 'coopen-places-media'}/${it.key}`, '--local', `--file=${tmp}`, '--content-type=image/jpeg'], { cwd: ROOT, encoding: 'utf8', shell: isWin });
+          if (res.status !== 0) throw new Error('r2 put local falló');
+        } else {
+          await r2putApi(it.key, buf, 'image/jpeg');
+        }
+        rows.push({ pid: it.pid, key: it.key, sort: it.sort });
+      } catch (e) { failed++; }
+      done++;
+      if (done % 25 === 0 || done === queue.length) process.stdout.write(`\r  ${done}/${queue.length} subidas (${failed} fallidas)`);
+    }
+  }
+  const chunks = Array.from({ length: CONC }, (_, i) => queue.filter((_, j) => j % CONC === i));
+  await Promise.all(chunks.map(worker));
+  process.stdout.write('\n');
+
+  // Nada de esto pisa fotos existentes: es un import a propiedades recién creadas, así
+  // que no hace falta un DELETE previo (property_media arranca vacía para estos ids).
+  const pidsWithPhotos = [...new Set(rows.map((r) => r.pid))];
+  if (pidsWithPhotos.length) {
+    const sqlRows = rows.map((r) => `(${r.pid}, '${r.key}', 'photo', ${r.sort})`).join(',\n');
+    const sqlFile = resolve(WORKDIR, 'photos-insert.sql');
+    await writeFile(sqlFile, `DELETE FROM property_media WHERE property_id IN (${pidsWithPhotos.join(',')});\nINSERT INTO property_media (property_id, r2_key, kind, sort) VALUES\n${sqlRows};\n`);
+    d1(sqlFile, { file: true });
+  }
+  process.stdout.write(`✓ ${rows.length} fotos subidas y registradas${failed ? ` · ${failed} fallaron (podés re-correr, es idempotente)` : ''}${skipRows ? ` · ${skipRows} propiedades sin fila (corré 'sql' + migrate primero)` : ''}\n`);
 }
 
 // ── main ──────────────────────────────────────────────────────────────────────
