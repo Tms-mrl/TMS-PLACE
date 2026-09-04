@@ -8,9 +8,15 @@
 > `[env.<cliente>]` ni SSO del ecosistema Coopen (`AUTH_URL`) — es un solo tenant.
 > El historial de "Estado" de más abajo se trajo tal cual (viene de cuando el código
 > vivía en el monorepo); a partir de la entrada `(2026-09-04)` es de acá.
+>
+> **Ya estaba provisionado**: el Worker/D1/R2 de `wrangler.toml` no son nuevos — son de
+> un deploy standalone anterior de esta misma app, bajo esta misma cuenta de Cloudflare
+> (de cuando salió del monorepo por primera vez, antes de volver a entrar como
+> `SuboAcaTomy/Places/`). Sigue vivo en `coopen-places.tomyredrebell.workers.dev`. Se
+> reusa tal cual en vez de provisionar de cero.
 
 **Dominio:** sin dominio propio todavía — en producción sirve desde
-`https://elmuelle-places.<tu-subdominio>.workers.dev` (ver `wrangler.toml`).
+`https://coopen-places.tomyredrebell.workers.dev` (ver `wrangler.toml`).
 
 ## Qué es
 
@@ -46,17 +52,17 @@ SaaS de **gestión inmobiliaria** + **marketplace público**, para El Muelle Pro
 
 ## Stack
 
-- **Cloudflare Worker único** (`elmuelle-places`): Hono + SPA por assets binding.
+- **Cloudflare Worker único** (`coopen-places`): Hono + SPA por assets binding.
 - **Frontend**: React 19 + Vite 6, TS estricto, kebab-case, **mobile-first**.
-- **Backend**: Hono 4 + D1 (`elmuelle-places-db`, binding `DB`), migraciones en
+- **Backend**: Hono 4 + D1 (`coopen-places-db`, binding `DB`), migraciones en
   `db/migrations/`.
-- **Blobs**: R2 (`elmuelle-places-media`) — fotos/planos/docs; D1 solo guarda metadatos
+- **Blobs**: R2 (`coopen-places-media`) — fotos/planos/docs; D1 solo guarda metadatos
   + key R2, nunca el binario.
 - **Auth**: dos caminos (ver §Auth) — link de acceso de agencia (el principal, sin
   Google) · login propio con Google + sesión local (`sessions`, cookie `places_session`,
-  opcional). Sin `JWT_SECRET`, sin SSO externo.
-- **Dominio**: sin dominio propio todavía — sirve desde `workers.dev`. Cuando se defina
-  uno: agregar `routes = [{ pattern = "...", custom_domain = true }]` en `wrangler.toml`
+  con OAuth client propio ya configurado). Sin `JWT_SECRET`, sin SSO externo.
+- **Dominio**: sin dominio propio todavía — sirve desde `coopen-places.tomyredrebell.workers.dev`.
+  Cuando se defina uno: agregar `routes = [{ pattern = "...", custom_domain = true }]` en `wrangler.toml`
   y, si se habilita el login con Google, autorizar el nuevo `redirect_uri` en Google
   Cloud Console (client **propio**, no compartido con nadie).
 
@@ -175,11 +181,20 @@ Todo `/api/*` salvo `/api/auth/*` y las rutas públicas del marketplace exige
 
 ## Provisión
 
-**Pendiente de provisionar** en la cuenta de Cloudflare propia (no la del compañero):
-D1 `elmuelle-places-db` y R2 `elmuelle-places-media` (`wrangler d1 create` / `wrangler
-r2 bucket create`, después completar los `TODO` de `wrangler.toml` con los ids que
-devuelvan), dominio propio (hoy solo `workers.dev`). `SUPER_ADMIN_SUBS` ya apunta al
-email real del dueño de esta cuenta.
+**Ya provisionado**, en la cuenta de Cloudflare propia (no la del compañero de
+Coopenplace): Worker `coopen-places`, D1 `coopen-places-db` (`12c87ac7-…`) y R2
+`coopen-places-media`, vivos en `coopen-places.tomyredrebell.workers.dev` desde un
+deploy standalone anterior de esta misma app. `SUPER_ADMIN_SUBS` ya apunta al email
+real del dueño. Google OAuth propio ya configurado (`GOOGLE_CLIENT_ID` en
+`wrangler.toml`; el Client Secret es un secret, no vive en el repo).
+
+**Pendiente**: revisar en qué migración está `coopen-places-db` (es la de un deploy
+standalone viejo — `pnpm db:migrate:local` es idempotente y tolera "already exists", así
+que `pnpm db:migrate:remote` se puede correr igual, aplica solo lo que falte), + cargar
+el import de El Muelle + las fotos contra esta D1/R2 (hoy solo están corridas contra
+D1/R2 locales), y un `wrangler deploy` para que el código nuevo reemplace al que está
+publicado ahora (viejo, sin el rework de Compartir ni la cartera real). Dominio propio:
+pendiente, sigue en `workers.dev`.
 
 ## Roadmap
 
@@ -194,7 +209,10 @@ email real del dueño de esta cuenta.
 de `SuboAcaTomy/Places/` del monorepo `Coopenplace` (compartido con un compañero que
 mantiene su propia cuenta de Cloudflare) a este repo dedicado. Se sacó el split
 white-label (`[env.elmuelle]`) — acá es un solo tenant — y el SSO de CoopenAuth
-(`AUTH_URL`), que dependía de la cuenta del compañero.
+(`AUTH_URL`), que dependía de la cuenta del compañero. El Worker/D1/R2 de
+`wrangler.toml` **no son nuevos**: son de un deploy standalone anterior de esta misma
+app bajo esta cuenta (`coopen-places.tomyredrebell.workers.dev`, sigue vivo) — se
+reusan en vez de provisionar de cero.
 
 Se trajeron dos piezas de trabajo hechas sobre el código del monorepo:
 
@@ -210,8 +228,9 @@ Se trajeron dos piezas de trabajo hechas sobre el código del monorepo:
    idempotentemente por `external_url`. `db/seed/elmuelle-branches-real.sql` tiene las 3
    sucursales reales (La Lucila del Mar / San Bernardo / Aguas Verdes). Verificado
    251/251 fichas bajadas sin fallos, tipo y sucursal 100% resueltos, 2.214 fotos.
-   **Corrido contra D1/R2 local; falta correrlo contra la base real** (pendiente de
-   provisionar, ver §Provisión).
+   **Corrido contra D1/R2 local; falta correrlo contra `coopen-places-db`/`coopen-places-media`
+   reales** (primero hay que ver en qué migración está esa D1 — es la del deploy standalone
+   viejo, no necesariamente al día — y migrarla antes de cargar, ver §Provisión) y deployar.
 
 ## Estado (2026-08-20 b)
 

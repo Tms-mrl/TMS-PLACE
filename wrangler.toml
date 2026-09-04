@@ -1,25 +1,23 @@
 # El Muelle Places — Worker único: API Hono + SSR público del marketplace +
 # SPA de gestión servida por assets.
 #
-# Standalone, cuenta de Cloudflare propia (no la de coopenstudio.com/Charly). Un solo
-# tenant: no hay más split [env.<cliente>] — esta es LA agencia (El Muelle), no un
-# white-label genérico. `account_id` y los `database_id`/`bucket_name` de abajo son
-# placeholders: hay que reemplazarlos después de `wrangler login` + provisionar D1/R2
-# en la cuenta propia (ver README para los comandos exactos).
+# Standalone, cuenta de Cloudflare propia (no la del compañero que maneja Coopenplace).
+# Ya provisionado: este `account_id`/`database_id`/bucket son los reales, de un deploy
+# anterior de esta misma app bajo la misma cuenta (`coopen-places.tomyredrebell.workers.dev`,
+# vivo). Un solo tenant: no hay más split [env.<cliente>] — esta es LA agencia (El Muelle).
 #
 # Secrets (wrangler secret put <NOMBRE>, NUNCA acá):
-#   GOOGLE_CLIENT_SECRET — solo si se habilita el login propio con Google (opcional:
-#                          el acceso principal es el link de agencia, sin Google).
+#   GOOGLE_CLIENT_SECRET — OAuth de Google (login). Ver GOOGLE_CLIENT_ID en [vars] abajo.
 #   INTERNAL_API_SECRET  — futuro: emails (alertas de búsquedas guardadas).
 #   SCRAPER_URL           — proxy de scraping para el import de Argenprop (opcional).
-name = "elmuelle-places"
+name = "coopen-places"
 main = "src/worker/index.ts"
-account_id = "TODO-tu-account-id-de-cloudflare"
+account_id = "d9eac09aa903fdf10ee5a521bd0186dc"
 # Máximo soportado por el workerd de wrangler ~4.85 (pineado por Node 20).
 compatibility_date = "2026-05-01"
 workers_dev = true
 
-# Sin dominio propio todavía: el Worker sirve en https://elmuelle-places.<tu-subdominio>.workers.dev
+# Sin dominio propio todavía: el Worker sirve en https://coopen-places.tomyredrebell.workers.dev
 # Cuando haya un dominio, agregar acá: routes = [{ pattern = "tu-dominio.com", custom_domain = true }]
 
 # El Worker corre PRIMERO en TODA request: renderiza SSR el marketplace público
@@ -33,26 +31,24 @@ run_worker_first = true
 
 [[d1_databases]]
 binding = "DB"
-database_name = "elmuelle-places-db"
-database_id = "TODO-wrangler-d1-create-elmuelle-places-db"
+database_name = "coopen-places-db"
+database_id = "12c87ac7-fc47-4db4-abbc-c6617b12eedf"
 
 [[r2_buckets]]
 binding = "MEDIA"
-bucket_name = "elmuelle-places-media"
+bucket_name = "coopen-places-media"
 
 [vars]
-# Super-admins del panel interno (Admin de Coopen → acá es simplemente "el admin de la
-# app"): email o auth_sub, separados por coma. Con esto alcanza para entrar sin Google —
-# el acceso principal de El Muelle es el link de agencia (/i/<token>), sin contraseña.
+# OAuth Client ID de Google (Google Cloud Console → APIs & Services → Credentials →
+# OAuth client ID, tipo "Web application"), propio, ya autorizado para este dominio.
+# No es secreto, pero el Client Secret sí (`wrangler secret put GOOGLE_CLIENT_SECRET`).
+GOOGLE_CLIENT_ID = "932608486382-eirj5s8emld2vfr64pruprtg1po1rprn.apps.googleusercontent.com"
+# Super-admins del panel interno: email (o auth_sub) separados por coma.
 SUPER_ADMIN_SUBS = "tomasmoodleiram@gmail.com"
-# Base pública (links absolutos del cron de alertas). Actualizar cuando haya dominio propio.
-SITE_URL = "https://elmuelle-places.workers.dev"
-# Login propio con Google (opcional, además del link de agencia). Necesitaría un OAuth
-# client PROPIO en Google Cloud Console (no el de coopenstudio.com) con
-# `https://<tu-dominio>/api/auth/callback/google` autorizado como redirect URI.
-# GOOGLE_CLIENT_ID = "..."
+# Base pública del sitio (para links en emails del cron; no hay request ahí para derivarla).
+SITE_URL = "https://coopen-places.tomyredrebell.workers.dev"
 
 # Cron: alertas de búsquedas guardadas por email (1 vez al día, ~10am ART = 13 UTC).
-# El handler es DORMANTE hasta setear el secret INTERNAL_API_SECRET (no manda nada sin él).
+# El handler está DORMANTE hasta que se conecte un proveedor de mail (ver lib/alerts.ts).
 [triggers]
 crons = ["0 13 * * *"]

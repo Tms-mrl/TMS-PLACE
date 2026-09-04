@@ -2,7 +2,7 @@
 // Aplica TODAS las migraciones de db/migrations/ a la D1 (local o remota).
 // Tolerante a "already exists" / "duplicate column" para poder correrlo N veces.
 //
-//   pnpm db:migrate:local                        (default, elmuelle-places-db)
+//   pnpm db:migrate:local                        (default, coopen-places-db)
 //   pnpm db:migrate:remote                       (⚠️ contra la D1 real — confirmar antes)
 //   node scripts/migrate-d1.mjs --remote --db=otro-nombre
 
@@ -14,7 +14,7 @@ import { spawnSync } from 'node:child_process';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const migrationsDir = resolve(root, 'db/migrations');
 const dbArg = process.argv.find((a) => a.startsWith('--db='));
-const DB_NAME = dbArg ? dbArg.slice('--db='.length) : 'elmuelle-places-db';
+const DB_NAME = dbArg ? dbArg.slice('--db='.length) : 'coopen-places-db';
 const envArg = process.argv.find((a) => a.startsWith('--env='));
 const ENV_ARGS = envArg ? ['--env', envArg.slice('--env='.length)] : [];
 

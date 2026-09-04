@@ -398,13 +398,13 @@ DELETE FROM properties WHERE external_url IS NULL;  -- cascade: property_media, 
 }
 
 function d1(sqlOrFile, { file = false } = {}) {
-  const a = ['wrangler', 'd1', 'execute', 'elmuelle-places-db', LOCAL, '--yes', file ? `--file=${sqlOrFile}` : `--command=${sqlOrFile}`];
+  const a = ['wrangler', 'd1', 'execute', 'coopen-places-db', LOCAL, '--yes', file ? `--file=${sqlOrFile}` : `--command=${sqlOrFile}`];
   const r = spawnSync('npx', a, { cwd: ROOT, encoding: 'utf8', shell: isWin });
   if (r.status !== 0) throw new Error((r.stderr || r.stdout || '').split('\n').filter((l) => /error/i.test(l))[0] || 'd1 falló');
   return r.stdout || '';
 }
 function d1json(sql) {
-  const a = ['wrangler', 'd1', 'execute', 'elmuelle-places-db', LOCAL, '--yes', '--json', `--command=${sql}`];
+  const a = ['wrangler', 'd1', 'execute', 'coopen-places-db', LOCAL, '--yes', '--json', `--command=${sql}`];
   const r = spawnSync('npx', a, { cwd: ROOT, encoding: 'utf8', shell: isWin });
   const i = (r.stdout || '').indexOf('[');
   try { return JSON.parse(r.stdout.slice(i))[0].results; } catch { return []; }
@@ -412,7 +412,7 @@ function d1json(sql) {
 function r2put(key, buf) {
   const tmp = resolve(WORKDIR, 'tmp.bin');
   writeFileSync(tmp, buf);
-  const r = spawnSync('npx', ['wrangler', 'r2', 'object', 'put', `elmuelle-places-media/${key}`, LOCAL, `--file=${tmp}`, '--content-type=image/jpeg'], { cwd: ROOT, encoding: 'utf8', shell: isWin });
+  const r = spawnSync('npx', ['wrangler', 'r2', 'object', 'put', `coopen-places-media/${key}`, LOCAL, `--file=${tmp}`, '--content-type=image/jpeg'], { cwd: ROOT, encoding: 'utf8', shell: isWin });
   return r.status === 0;
 }
 
