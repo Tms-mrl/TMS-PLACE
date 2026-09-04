@@ -1,0 +1,58 @@
+# El Muelle Places — Worker único: API Hono + SSR público del marketplace +
+# SPA de gestión servida por assets.
+#
+# Standalone, cuenta de Cloudflare propia (no la de coopenstudio.com/Charly). Un solo
+# tenant: no hay más split [env.<cliente>] — esta es LA agencia (El Muelle), no un
+# white-label genérico. `account_id` y los `database_id`/`bucket_name` de abajo son
+# placeholders: hay que reemplazarlos después de `wrangler login` + provisionar D1/R2
+# en la cuenta propia (ver README para los comandos exactos).
+#
+# Secrets (wrangler secret put <NOMBRE>, NUNCA acá):
+#   GOOGLE_CLIENT_SECRET — solo si se habilita el login propio con Google (opcional:
+#                          el acceso principal es el link de agencia, sin Google).
+#   INTERNAL_API_SECRET  — futuro: emails (alertas de búsquedas guardadas).
+#   SCRAPER_URL           — proxy de scraping para el import de Argenprop (opcional).
+name = "elmuelle-places"
+main = "src/worker/index.ts"
+account_id = "TODO-tu-account-id-de-cloudflare"
+# Máximo soportado por el workerd de wrangler ~4.85 (pineado por Node 20).
+compatibility_date = "2026-05-01"
+workers_dev = true
+
+# Sin dominio propio todavía: el Worker sirve en https://elmuelle-places.<tu-subdominio>.workers.dev
+# Cuando haya un dominio, agregar acá: routes = [{ pattern = "tu-dominio.com", custom_domain = true }]
+
+# El Worker corre PRIMERO en TODA request: renderiza SSR el marketplace público
+# (indexable) y delega a ASSETS los estáticos y la SPA de gestión (/app/*). El fallback
+# SPA sirve index.html para rutas client-side.
+[assets]
+directory = "dist/client"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "elmuelle-places-db"
+database_id = "TODO-wrangler-d1-create-elmuelle-places-db"
+
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "elmuelle-places-media"
+
+[vars]
+# Super-admins del panel interno (Admin de Coopen → acá es simplemente "el admin de la
+# app"): email o auth_sub, separados por coma. Con esto alcanza para entrar sin Google —
+# el acceso principal de El Muelle es el link de agencia (/i/<token>), sin contraseña.
+SUPER_ADMIN_SUBS = "tomasmoodleiram@gmail.com"
+# Base pública (links absolutos del cron de alertas). Actualizar cuando haya dominio propio.
+SITE_URL = "https://elmuelle-places.workers.dev"
+# Login propio con Google (opcional, además del link de agencia). Necesitaría un OAuth
+# client PROPIO en Google Cloud Console (no el de coopenstudio.com) con
+# `https://<tu-dominio>/api/auth/callback/google` autorizado como redirect URI.
+# GOOGLE_CLIENT_ID = "..."
+
+# Cron: alertas de búsquedas guardadas por email (1 vez al día, ~10am ART = 13 UTC).
+# El handler es DORMANTE hasta setear el secret INTERNAL_API_SECRET (no manda nada sin él).
+[triggers]
+crons = ["0 13 * * *"]

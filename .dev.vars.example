@@ -1,0 +1,14 @@
+# Copiar a .dev.vars para desarrollo local (gitignored).
+#
+# DEV_USER: bypass del login en local — evita tener que pasar por Google en dev.
+# Formato: "email|nombre". NUNCA setear en prod.
+DEV_USER="dev@example.com|Dev Local"
+
+# Opcional: tratar al DEV_USER como super-admin del panel interno en local.
+SUPER_ADMIN_SUBS="dev:local"
+
+# Solo necesarios si querés probar el login real de Google en local (con DEV_USER
+# seteado no hace falta). Client ID/Secret de Google Cloud Console; agregá
+# http://localhost:8787/api/auth/callback/google como redirect URI autorizado.
+# GOOGLE_CLIENT_ID="..."
+# GOOGLE_CLIENT_SECRET="..."

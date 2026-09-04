@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.wrangler/
+.dev.vars
+*.log
+.claude/scheduled_tasks.lock
+.claude/settings.local.json
+
+# Cache/estado de trabajo del importador de El Muelle (scripts/import-elmuelle.mjs).
+# listings.json y el HTML cacheado son regenerables con `scrape`; el .sql final que
+# sí se versiona vive en db/seed/elmuelle-import.sql.
+scripts/.import-elmuelle/
