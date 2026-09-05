@@ -171,7 +171,6 @@ export function PropertyRow({ p, index, expanded, checked, shareMessage, onSelec
 
         <RowMenu label="Más acciones" icon={<MoreHorizontal className="h-3.5 w-3.5" />}>
           <MenuItem icon={<Camera className="h-4 w-4" />} onClick={onManage}>Gestionar fotos</MenuItem>
-          <MenuItem icon={<CalendarIcon className="h-4 w-4" />} onClick={onCalendar}>Reservas / calendario</MenuItem>
           <MenuItem icon={<BarChart3 className="h-4 w-4" />} onClick={onStats}>Estadísticas de visitas</MenuItem>
           <MenuItem icon={<ChevronDown className="h-4 w-4" />} onClick={onToggle}>{expanded ? 'Ocultar detalle' : 'Ver detalle'}</MenuItem>
           <hr className="rmenu-sep" />
@@ -194,6 +193,9 @@ export function PropertyRow({ p, index, expanded, checked, shareMessage, onSelec
           <MenuItem icon={<Trash2 className="h-4 w-4" />} danger onClick={del}>Eliminar</MenuItem>
         </RowMenu>
 
+        <button type="button" className="rbtn" onClick={onCalendar} title="Reservas / calendario">
+          <CalendarIcon className="h-3.5 w-3.5" /><span>Calendario</span>
+        </button>
         <button type="button" className="rbtn" onClick={shareWhatsApp} disabled={!p.external_url}
           title={p.external_url ? 'Compartir por WhatsApp' : 'Falta el link del aviso — cargalo en Editar'}>
           <Share2 className="h-3.5 w-3.5" /><span>Compartir</span>
