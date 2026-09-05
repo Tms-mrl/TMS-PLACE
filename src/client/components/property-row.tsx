@@ -78,7 +78,6 @@ export function PropertyRow({ p, index, expanded, checked, shareMessage, onSelec
   onManage: () => void; onEdit: () => void; onCalendar: () => void; onLightbox: (p: Property) => void; onStats: () => void; onReload: () => void;
 }) {
   const confirm = useConfirm();
-  const [copied, setCopied] = useState(false);
 
   async function patch(body: Record<string, unknown>) {
     try { await api(`/api/properties/${p.id}`, { method: 'PATCH', body: JSON.stringify(body) }); onReload(); }
@@ -90,8 +89,11 @@ export function PropertyRow({ p, index, expanded, checked, shareMessage, onSelec
     catch (e) { toast(String((e as Error).message), 'err'); }
   }
   function copyLink() {
-    if (!p.external_url) return;
-    navigator.clipboard?.writeText(p.external_url).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1600); }, () => {});
+    if (!p.external_url) { toast('Esta propiedad no tiene link del aviso — cargalo en Editar', 'err'); return; }
+    navigator.clipboard?.writeText(p.external_url).then(
+      () => toast('Link copiado ✓', 'ok'),
+      () => toast('No se pudo copiar', 'err'),
+    );
   }
   // wa.me sin número → WhatsApp abre el selector de contacto. El texto es el que la
   // inmobiliaria escribió en Configuración y abajo el link del aviso.
@@ -168,8 +170,16 @@ export function PropertyRow({ p, index, expanded, checked, shareMessage, onSelec
 
       <div className="prow-actions">
         <button type="button" className="rbtn is-primary" onClick={onEdit}><Pencil className="h-3.5 w-3.5" /><span>Editar</span></button>
+        <button type="button" className="rbtn" onClick={onCalendar} title="Reservas / calendario">
+          <CalendarIcon className="h-3.5 w-3.5" /><span>Calendario</span>
+        </button>
+        <button type="button" className="rbtn" onClick={shareWhatsApp} disabled={!p.external_url}
+          title={p.external_url ? 'Compartir por WhatsApp' : 'Falta el link del aviso — cargalo en Editar'}>
+          <Share2 className="h-3.5 w-3.5" /><span>Compartir</span>
+        </button>
 
-        <RowMenu label="Más acciones" icon={<MoreHorizontal className="h-3.5 w-3.5" />}>
+        <RowMenu label="Más opciones" icon={<MoreHorizontal className="h-3.5 w-3.5" />}>
+          <MenuItem icon={<LinkIcon className="h-4 w-4" />} onClick={copyLink}>Copiar link</MenuItem>
           <MenuItem icon={<Camera className="h-4 w-4" />} onClick={onManage}>Gestionar fotos</MenuItem>
           <MenuItem icon={<BarChart3 className="h-4 w-4" />} onClick={onStats}>Estadísticas de visitas</MenuItem>
           <MenuItem icon={<ChevronDown className="h-4 w-4" />} onClick={onToggle}>{expanded ? 'Ocultar detalle' : 'Ver detalle'}</MenuItem>
@@ -192,19 +202,6 @@ export function PropertyRow({ p, index, expanded, checked, shareMessage, onSelec
           <hr className="rmenu-sep" />
           <MenuItem icon={<Trash2 className="h-4 w-4" />} danger onClick={del}>Eliminar</MenuItem>
         </RowMenu>
-
-        <button type="button" className="rbtn" onClick={onCalendar} title="Reservas / calendario">
-          <CalendarIcon className="h-3.5 w-3.5" /><span>Calendario</span>
-        </button>
-        <button type="button" className="rbtn" onClick={shareWhatsApp} disabled={!p.external_url}
-          title={p.external_url ? 'Compartir por WhatsApp' : 'Falta el link del aviso — cargalo en Editar'}>
-          <Share2 className="h-3.5 w-3.5" /><span>Compartir</span>
-        </button>
-        <button type="button" className="rbtn" onClick={copyLink} disabled={!p.external_url}
-          title={p.external_url ? 'Copiar el link del aviso' : 'Falta el link del aviso — cargalo en Editar'}>
-          {copied ? <Check className="h-3.5 w-3.5" /> : <LinkIcon className="h-3.5 w-3.5" />}
-          <span>{copied ? 'Copiado ✓' : 'Copiar link'}</span>
-        </button>
       </div>
 
       {expanded && (
