@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Calendar as CalendarIcon, ChevronLeft, ChevronRight, Download, EyeOff,
-  Search, Share2, SlidersHorizontal, Tag, X,
+  Search, Share2, Tag, X,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { cn } from '../lib/cn';
@@ -167,7 +167,6 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [f, setF] = useState({ ...EMPTY_F });
   const set = (k: keyof typeof EMPTY_F, v: string) => setF((s) => ({ ...s, [k]: v }));
-  const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(0);
   const [capped, setCapped] = useState(false);
   // Texto que la inmobiliaria escribió en Configuración: precede al/los link(s) al compartir.
@@ -184,7 +183,6 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
   useEffect(() => {
     if (!preset) return;
     setF({ ...EMPTY_F, status: preset.status || '', branch: preset.branch != null ? String(preset.branch) : '', op: preset.op || '', published: preset.published || '' });
-    setShowFilters(true);
   }, [preset]);
   const reload = () => { load(); onChanged?.(); };
 
@@ -281,11 +279,6 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
     };
   }, [props]);
 
-  // Cuántos filtros hay puestos, sin contar la búsqueda (que vive afuera del panel
-  // plegable) ni el toggle de archivadas: es el número del badge de "Más filtros".
-  const activeFilters = (['op', 'status', 'branch', 'priceMax', 'capacity', 'published'] as const)
-    .filter((k) => !!f[k]).length + (f.dateFrom || f.dateTo ? 1 : 0);
-
   // Un cambio de filtro puede dejarte parado en una página que ya no existe.
   const pages = Math.max(1, Math.ceil(displayRows.length / PAGE_SIZE));
   const safePage = Math.min(page, pages - 1);
@@ -299,7 +292,7 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
   const shownTo = Math.min(displayRows.length, (safePage + 1) * PAGE_SIZE);
 
   /** Un KPI clickeado deja SOLO ese filtro puesto (no se acumulan entre sí). */
-  const applyKpi = (patch: Partial<typeof EMPTY_F>) => { setF({ ...EMPTY_F, ...patch }); setShowFilters(true); };
+  const applyKpi = (patch: Partial<typeof EMPTY_F>) => { setF({ ...EMPTY_F, ...patch }); };
 
   return (
     <div>
@@ -343,17 +336,13 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
           <input placeholder="Buscar título / ciudad" value={f.text} onChange={(e) => set('text', e.target.value)} />
           {f.text && <button type="button" className="psearch-x" onClick={() => set('text', '')} aria-label="Limpiar búsqueda"><X className="h-4 w-4" /></button>}
         </div>
-        <Button variant={showFilters ? 'secondary' : 'outline'} size="sm" onClick={() => setShowFilters((o) => !o)} aria-expanded={showFilters}>
-          <SlidersHorizontal className="h-4 w-4" />Más filtros
-          {activeFilters > 0 && <span className="pfil-badge">{activeFilters}</span>}
-        </Button>
         <Button variant={f.archived ? 'secondary' : 'outline'} size="sm" onClick={() => setF((s) => ({ ...s, archived: !s.archived }))}>
           {f.archived ? 'Viendo archivadas' : 'Ver archivadas'}
         </Button>
         {dirty && <Button variant="ghost" size="sm" onClick={() => setF({ ...EMPTY_F })}><X className="h-4 w-4" />Limpiar</Button>}
       </div>
 
-      <div className="filters pfilters" hidden={!showFilters}>
+      <div className="filters pfilters">
         <Select value={f.op || ALL} onValueChange={(v) => set('op', v === ALL ? '' : v)}>
           <SelectTrigger className="w-auto min-w-[130px]"><SelectValue /></SelectTrigger>
           <SelectContent>
