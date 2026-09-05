@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import {
   BarChart3, Bath, BedDouble, Calendar as CalendarIcon, Camera, Check, ChevronDown,
   Eye, EyeOff, Home, Link as LinkIcon, MoreHorizontal, Pencil, Ruler,
@@ -62,9 +62,9 @@ function RowMenu({ label, icon, children }: { label: string; icon: ReactNode; ch
   );
 }
 
-function MenuItem({ icon, children, onClick, danger }: { icon: ReactNode; children: ReactNode; onClick: () => void; danger?: boolean }) {
+function MenuItem({ icon, children, onClick, danger, className }: { icon: ReactNode; children: ReactNode; onClick: () => void; danger?: boolean; className?: string }) {
   return (
-    <button type="button" role="menuitem" className={cn('rmenu-item', danger && 'is-danger')} onClick={onClick}>
+    <button type="button" role="menuitem" className={cn('rmenu-item', danger && 'is-danger', className)} onClick={onClick}>
       {icon}<span>{children}</span>
     </button>
   );
@@ -73,8 +73,8 @@ function MenuItem({ icon, children, onClick, danger }: { icon: ReactNode; childr
 // ── La fila ──────────────────────────────────────────────────────────────────
 // UNA sola versión para escritorio y celular: el layout es grid y se reacomoda por CSS.
 // Antes había dos componentes (tabla + card mobile) con las mismas acciones duplicadas.
-export function PropertyRow({ p, index, expanded, checked, shareMessage, onSelect, onToggle, onManage, onEdit, onCalendar, onLightbox, onStats, onReload }: {
-  p: Property; index: number; expanded: boolean; checked: boolean; shareMessage: string; onSelect: () => void; onToggle: () => void;
+export function PropertyRow({ p, index, expanded, checked, selectMode, shareMessage, onSelect, onToggle, onManage, onEdit, onCalendar, onLightbox, onStats, onReload }: {
+  p: Property; index: number; expanded: boolean; checked: boolean; selectMode: boolean; shareMessage: string; onSelect: () => void; onToggle: () => void;
   onManage: () => void; onEdit: () => void; onCalendar: () => void; onLightbox: (p: Property) => void; onStats: () => void; onReload: () => void;
 }) {
   const confirm = useConfirm();
@@ -113,9 +113,17 @@ export function PropertyRow({ p, index, expanded, checked, shareMessage, onSelec
     p.area_m2 ? { k: 'area', n: `${p.area_m2} m²`, lbl: 'superficie', ic: <Ruler className="h-3.5 w-3.5" /> } : null,
   ].filter(Boolean) as { k: string; n: string; lbl: string; ic: ReactNode }[];
 
+  // En "modo selección" (ya hay al menos una marcada), tocar cualquier parte de la fila
+  // que no sea un control (botón / link / el propio check / el menú) marca o desmarca —
+  // el checkbox solo es chico para el pulgar en el celu.
+  const onRowClick = selectMode
+    ? (e: ReactMouseEvent) => { if (!(e.target as HTMLElement).closest('button, a, input, label, .rmenu')) onSelect(); }
+    : undefined;
+
   return (
     <article
-      className={cn('prow', checked && 'is-sel', p.archived_at && 'is-archived', !p.published && !p.archived_at && 'is-draft')}
+      className={cn('prow', checked && 'is-sel', selectMode && 'is-selectmode', p.archived_at && 'is-archived', !p.published && !p.archived_at && 'is-draft')}
+      onClick={onRowClick}
       // El stagger se corta a las 12 primeras: con 50 por página, escalonar todas
       // haría esperar segundos a la última.
       style={index < 12 ? { animationDelay: `${index * 40}ms` } : undefined}
@@ -179,6 +187,7 @@ export function PropertyRow({ p, index, expanded, checked, shareMessage, onSelec
         </button>
 
         <RowMenu label="Más opciones" icon={<MoreHorizontal className="h-3.5 w-3.5" />}>
+          <MenuItem className="only-mob" icon={<Pencil className="h-4 w-4" />} onClick={onEdit}>Editar</MenuItem>
           <MenuItem icon={<LinkIcon className="h-4 w-4" />} onClick={copyLink}>Copiar link</MenuItem>
           <MenuItem icon={<Camera className="h-4 w-4" />} onClick={onManage}>Gestionar fotos</MenuItem>
           <MenuItem icon={<BarChart3 className="h-4 w-4" />} onClick={onStats}>Estadísticas de visitas</MenuItem>

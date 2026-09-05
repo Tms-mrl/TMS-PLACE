@@ -639,6 +639,8 @@ input, select, textarea { color: var(--fg); }
 .prow:last-child { border-bottom: 0; }
 .prow:hover { background: color-mix(in srgb, var(--accent) 3%, var(--panel)); }
 .prow.is-sel { background: color-mix(in srgb, var(--accent) 7%, var(--panel)); box-shadow: inset 3px 0 0 var(--accent); }
+/* En modo selección la fila entera es clickeable para marcar/desmarcar (ver property-row.tsx). */
+.prow.is-selectmode { cursor: pointer; }
 /* Sin publicar / archivada se tinen: es el estado que hay que poder saltear de un vistazo. */
 .prow.is-draft { background: color-mix(in srgb, var(--warn) 7%, var(--panel)); }
 .prow.is-draft:hover { background: color-mix(in srgb, var(--warn) 11%, var(--panel)); }
@@ -756,6 +758,8 @@ input, select, textarea { color: var(--fg); }
 .rmenu-item.is-danger:hover { background: color-mix(in srgb, var(--err) 10%, transparent); }
 .rmenu-item.is-danger svg, .rmenu-item.is-danger:hover svg { color: var(--err); }
 .rmenu-sep { height: 1px; margin: 5px 6px; border: 0; background: var(--line); }
+/* "Editar" vive como botón suelto en desktop y se muda al menú en mobile (ver media query). */
+.rmenu-item.only-mob { display: none; }
 
 /* Detalle desplegado */
 .prow-detail { grid-column: 1 / -1; margin-top: 6px; padding: 14px; border-radius: 12px; background: var(--bg); border: 1px solid var(--line); }
@@ -765,12 +769,15 @@ input, select, textarea { color: var(--fg); }
 
 /* El celular: la grilla se apila y los botones pasan a fila */
 @media (max-width: 900px) {
-  .prow { grid-template-columns: auto 96px minmax(0, 1fr); gap: 10px; padding: 12px; }
-  .prow-thumb { width: 96px; height: 72px; }
+  .prow { grid-template-columns: auto 120px minmax(0, 1fr); gap: 10px; padding: 12px; }
+  .prow-thumb { width: 120px; height: 90px; }
   .prow-money { grid-column: 2 / -1; flex-direction: row; align-items: baseline; justify-content: flex-start; gap: 8px; text-align: left; flex-wrap: wrap; }
   .prow-money .prow-branch { margin-top: 0; }
   .prow-actions { grid-column: 2 / -1; flex-direction: row; flex-wrap: wrap; }
   .prow-actions > * { flex: 1 1 auto; }
+  /* "Editar" pasa al menú en mobile: menos botones apilados, foto más grande. */
+  .prow-actions > .rbtn.is-primary { display: none; }
+  .rmenu-item.only-mob { display: flex; }
   .rbtn { justify-content: center; }
   .rbtn > span { flex: 0 1 auto; }
   /* Anclado a la derecha, en pantalla angosta el menu se sale por ese lado. */

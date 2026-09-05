@@ -435,7 +435,7 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
         <div className="plist">
           {pageRows.map((p, i) => (
             <PropertyRow key={p.id} p={p} index={i} expanded={expanded === p.id} shareMessage={shareMessage}
-              checked={selected.has(p.id)} onSelect={() => toggleSel(p.id)}
+              checked={selected.has(p.id)} selectMode={selected.size > 0} onSelect={() => toggleSel(p.id)}
               onToggle={() => setExpanded((e) => (e === p.id ? null : p.id))}
               onManage={() => setManaging(p)} onEdit={() => setEditing(p)} onCalendar={() => setCal(p)}
               onLightbox={openLightbox} onStats={() => setStats(p)} onReload={reload} />
