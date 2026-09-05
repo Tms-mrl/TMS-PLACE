@@ -13,8 +13,24 @@ export const auth = new Hono<AppEnv>();
 
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
-const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
 const STATE_COOKIE = 'oauth_state';
+
+// El scope pide "openid", así que el token endpoint ya devuelve un id_token (JWT) con
+// sub/email/name adentro — no hace falta pegarle aparte a googleapis.com/oauth2/v3/userinfo
+// para tener esos datos. Se dejó de usar ese endpoint: en prod devolvía 401 "Invalid
+// Credentials" con un access_token recién emitido y válido (posible API deshabilitada o
+// re-configuración pendiente del lado de Google Cloud para este client), y tumbaba TODO
+// el login (nunca se creaba la sesión, aunque el intercambio de code sí funcionaba).
+// No se valida la firma del JWT a propósito: llega directo del token endpoint de Google
+// por HTTPS en una llamada server-to-server autenticada con nuestro client_secret, no de
+// un tercero no confiable — decodificar el payload alcanza para este caso.
+function decodeIdToken(idToken: string): { sub: string; email?: string; email_verified?: boolean; name?: string } | null {
+  try {
+    let b64 = idToken.split('.')[1]!.replace(/-/g, '+').replace(/_/g, '/');
+    while (b64.length % 4) b64 += '=';
+    return JSON.parse(atob(b64));
+  } catch { return null; }
+}
 
 function callbackUrl(requestUrl: string): string {
   return `${new URL(requestUrl).origin}/api/auth/callback/google`;
@@ -90,14 +106,13 @@ auth.get('/callback/google', async (c) => {
     console.error('login_error=token', tokenRes.status, await tokenRes.text());
     return c.redirect('/?login_error=token');
   }
-  const tokens = (await tokenRes.json()) as { access_token: string };
+  const tokens = (await tokenRes.json()) as { access_token: string; id_token?: string };
 
-  const infoRes = await fetch(GOOGLE_USERINFO_URL, { headers: { Authorization: `Bearer ${tokens.access_token}` } });
-  if (!infoRes.ok) {
-    console.error('login_error=userinfo', infoRes.status, await infoRes.text());
-    return c.redirect('/?login_error=userinfo');
+  const info = tokens.id_token ? decodeIdToken(tokens.id_token) : null;
+  if (!info) {
+    console.error('login_error=idtoken', 'falta o no se pudo decodificar el id_token');
+    return c.redirect('/?login_error=idtoken');
   }
-  const info = (await infoRes.json()) as { sub: string; email?: string; email_verified?: boolean; name?: string };
   if (!info.email || info.email_verified === false) {
     console.error('login_error=email', info);
     return c.redirect('/?login_error=email');
