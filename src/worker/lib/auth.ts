@@ -32,6 +32,22 @@ export function readCookie(request: Request, name: string): string | null {
 export async function upsertUser(db: D1Database, sub: string, email: string, name?: string | null): Promise<UserRow> {
   const existing = await db.prepare('SELECT * FROM users WHERE auth_sub = ?').bind(sub).first<UserRow>();
   if (existing) return existing;
+
+  // Si el admin lo invitó por email desde Equipo, ya existe una fila `invite:<email>` con
+  // la membresía puesta. Se ADOPTA (se le pone el sub real) en vez de crear otra suelta —
+  // así el invitado entra con su Google de siempre y cae directo en el panel de la agencia.
+  const invited = await db
+    .prepare('SELECT * FROM users WHERE auth_sub = ?')
+    .bind(`invite:${email.toLowerCase()}`)
+    .first<UserRow>();
+  if (invited) {
+    await db
+      .prepare('UPDATE users SET auth_sub = ?, name = COALESCE(?, name) WHERE id = ?')
+      .bind(sub, name ?? null, invited.id)
+      .run();
+    return { ...invited, auth_sub: sub, name: name ?? invited.name };
+  }
+
   const created = await db
     .prepare('INSERT INTO users (auth_sub, email, name) VALUES (?, ?, ?) RETURNING *')
     .bind(sub, email, name ?? null)
