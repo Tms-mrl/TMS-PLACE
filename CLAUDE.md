@@ -12,11 +12,11 @@
 > **Ya estaba provisionado**: el Worker/D1/R2 de `wrangler.toml` no son nuevos — son de
 > un deploy standalone anterior de esta misma app, bajo esta misma cuenta de Cloudflare
 > (de cuando salió del monorepo por primera vez, antes de volver a entrar como
-> `SuboAcaTomy/Places/`). Sigue vivo en `coopen-places.tomyredrebell.workers.dev`. Se
+> `SuboAcaTomy/Places/`). Sigue vivo en `elmuelle.tomyredrebell.workers.dev`. Se
 > reusa tal cual en vez de provisionar de cero.
 
 **Dominio:** sin dominio propio todavía — en producción sirve desde
-`https://coopen-places.tomyredrebell.workers.dev` (ver `wrangler.toml`).
+`https://elmuelle.tomyredrebell.workers.dev` (ver `wrangler.toml`).
 
 ## Qué es
 
@@ -52,7 +52,7 @@ SaaS de **gestión inmobiliaria** + **marketplace público**, para El Muelle Pro
 
 ## Stack
 
-- **Cloudflare Worker único** (`coopen-places`): Hono + SPA por assets binding.
+- **Cloudflare Worker único** (`elmuelle`): Hono + SPA por assets binding.
 - **Frontend**: React 19 + Vite 6, TS estricto, kebab-case, **mobile-first**.
 - **Backend**: Hono 4 + D1 (`coopen-places-db`, binding `DB`), migraciones en
   `db/migrations/`.
@@ -61,7 +61,7 @@ SaaS de **gestión inmobiliaria** + **marketplace público**, para El Muelle Pro
 - **Auth**: dos caminos (ver §Auth) — link de acceso de agencia (el principal, sin
   Google) · login propio con Google + sesión local (`sessions`, cookie `places_session`,
   con OAuth client propio ya configurado). Sin `JWT_SECRET`, sin SSO externo.
-- **Dominio**: sin dominio propio todavía — sirve desde `coopen-places.tomyredrebell.workers.dev`.
+- **Dominio**: sin dominio propio todavía — sirve desde `elmuelle.tomyredrebell.workers.dev`.
   Cuando se defina uno: agregar `routes = [{ pattern = "...", custom_domain = true }]` en `wrangler.toml`
   y, si se habilita el login con Google, autorizar el nuevo `redirect_uri` en Google
   Cloud Console (client **propio**, no compartido con nadie).
@@ -183,7 +183,7 @@ Todo `/api/*` salvo `/api/auth/*` y las rutas públicas del marketplace exige
 
 **Ya provisionado**, en la cuenta de Cloudflare propia (no la del compañero de
 Coopenplace): Worker `coopen-places`, D1 `coopen-places-db` (`12c87ac7-…`) y R2
-`coopen-places-media`, vivos en `coopen-places.tomyredrebell.workers.dev` desde un
+`coopen-places-media`, vivos en `elmuelle.tomyredrebell.workers.dev` desde un
 deploy standalone anterior de esta misma app. `SUPER_ADMIN_SUBS` ya apunta al email
 real del dueño. Google OAuth propio ya configurado (`GOOGLE_CLIENT_ID` en
 `wrangler.toml`; el Client Secret es un secret, no vive en el repo).
@@ -211,7 +211,7 @@ mantiene su propia cuenta de Cloudflare) a este repo dedicado. Se sacó el split
 white-label (`[env.elmuelle]`) — acá es un solo tenant — y el SSO de CoopenAuth
 (`AUTH_URL`), que dependía de la cuenta del compañero. El Worker/D1/R2 de
 `wrangler.toml` **no son nuevos**: son de un deploy standalone anterior de esta misma
-app bajo esta cuenta (`coopen-places.tomyredrebell.workers.dev`, sigue vivo) — se
+app bajo esta cuenta (`elmuelle.tomyredrebell.workers.dev`, sigue vivo) — se
 reusan en vez de provisionar de cero.
 
 Se trajeron dos piezas de trabajo hechas sobre el código del monorepo:

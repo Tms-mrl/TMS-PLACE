@@ -3,21 +3,21 @@
 #
 # Standalone, cuenta de Cloudflare propia (no la del compañero que maneja Coopenplace).
 # Ya provisionado: este `account_id`/`database_id`/bucket son los reales, de un deploy
-# anterior de esta misma app bajo la misma cuenta (`coopen-places.tomyredrebell.workers.dev`,
+# anterior de esta misma app bajo la misma cuenta (`elmuelle.tomyredrebell.workers.dev`,
 # vivo). Un solo tenant: no hay más split [env.<cliente>] — esta es LA agencia (El Muelle).
 #
 # Secrets (wrangler secret put <NOMBRE>, NUNCA acá):
 #   GOOGLE_CLIENT_SECRET — OAuth de Google (login). Ver GOOGLE_CLIENT_ID en [vars] abajo.
 #   INTERNAL_API_SECRET  — futuro: emails (alertas de búsquedas guardadas).
 #   SCRAPER_URL           — proxy de scraping para el import de Argenprop (opcional).
-name = "coopen-places"
+name = "elmuelle"
 main = "src/worker/index.ts"
 account_id = "d9eac09aa903fdf10ee5a521bd0186dc"
 # Máximo soportado por el workerd de wrangler ~4.85 (pineado por Node 20).
 compatibility_date = "2026-05-01"
 workers_dev = true
 
-# Sin dominio propio todavía: el Worker sirve en https://coopen-places.tomyredrebell.workers.dev
+# Sin dominio propio todavía: el Worker sirve en https://elmuelle.tomyredrebell.workers.dev
 # Cuando haya un dominio, agregar acá: routes = [{ pattern = "tu-dominio.com", custom_domain = true }]
 
 # El Worker corre PRIMERO en TODA request: renderiza SSR el marketplace público
@@ -46,7 +46,7 @@ GOOGLE_CLIENT_ID = "932608486382-eirj5s8emld2vfr64pruprtg1po1rprn.apps.googleuse
 # Super-admins del panel interno: email (o auth_sub) separados por coma.
 SUPER_ADMIN_SUBS = "tomasmoodleiram@gmail.com"
 # Base pública del sitio (para links en emails del cron; no hay request ahí para derivarla).
-SITE_URL = "https://coopen-places.tomyredrebell.workers.dev"
+SITE_URL = "https://elmuelle.tomyredrebell.workers.dev"
 
 # Cron: alertas de búsquedas guardadas por email (1 vez al día, ~10am ART = 13 UTC).
 # El handler está DORMANTE hasta que se conecte un proveedor de mail (ver lib/alerts.ts).
