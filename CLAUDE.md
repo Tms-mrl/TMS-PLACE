@@ -127,7 +127,7 @@ pnpm build                # vite build → dist/client
 pnpm run deploy            # build + wrangler deploy (NO `pnpm deploy`, gotcha pnpm 10+)
 pnpm typecheck
 pnpm db:migrate:local
-pnpm db:migrate:remote    # ⚠️ contra la base real — confirmar antes de correrlo
+pnpm db:migrate:remote    # contra la base real (aditivo: aplica solo lo que falte)
 ```
 
 Dev local sin login: `cp .dev.vars.example .dev.vars` → `DEV_USER="email|nombre"`
