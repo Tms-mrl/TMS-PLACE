@@ -336,6 +336,19 @@ input, select, textarea { color: var(--fg); }
   position: absolute; top: calc(100% + 8px); right: 0; z-index: 40; width: 260px;
   background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 14px;
 }
+/* En pantallas chicas el botón "Fechas" puede quedar cerca del borde izquierdo y el
+   popover anclado a él se salía de la pantalla (se cortaba el calendario). Se centra
+   fijo en el viewport, con un scrim vía box-shadow para que se lea como un diálogo. */
+@media (max-width: 768px) {
+  .date-range-pop {
+    position: fixed; inset: auto; top: 50%; left: 50%; right: auto;
+    transform: translate(-50%, -50%);
+    width: min(340px, calc(100vw - 28px));
+    max-height: calc(100vh - 28px); overflow-y: auto;
+    z-index: 60;
+    box-shadow: var(--shadow), 0 0 0 100vmax rgba(20, 15, 10, .42);
+  }
+}
 .cal-day-pick { cursor: pointer; font: inherit; transition: background .12s, color .12s; }
 .cal-day-pick:hover { border-color: var(--accent); }
 .cal-day-pick.in-range { background: color-mix(in srgb, var(--accent) 16%, var(--panel)); border-color: var(--accent); }
