@@ -276,6 +276,88 @@ properties.delete('/:id', async (c) => {
   return c.json({ success: true });
 });
 
+// Duplicar una propiedad (datos + fotos + propietario). El título de la copia lleva el
+// primer número libre: "Casa" → "Casa 2"; copiar de nuevo (o copiar "Casa 2") → "Casa 3".
+// Respeta el estado de publicación de la original; nace sin reservas, sin link de aviso
+// (external_url es único) y con estado 'disponible'.
+properties.post('/:id/copy', async (c) => {
+  const id = num(c.req.param('id'));
+  if (id == null) return bad(c, 'id inválido');
+  const src = await loadManageable(c.env.DB, c.var.user.id, id);
+  if (!src) return notFound(c, 'Propiedad no encontrada');
+
+  const mine = await getUserAgency(c.env.DB, c.var.user.id);
+  if (!mine) return bad(c, 'Necesitás pertenecer a una inmobiliaria para copiar propiedades');
+  const sub = await getSubStatus(c.env.DB, mine.agency.id);
+  if (sub?.blocked) return paymentRequired(c, 'Trial vencido: contactá a Coopen para reactivar la gestión');
+
+  // Base del título = título sin el número final. Escaneo la cartera por "base" y "base N"
+  // y tomo el mayor: la copia es max+1. Un título sin número cuenta como 1 → la 1ª copia es 2.
+  const rawTitle = String(src.title ?? '');
+  const base = rawTitle.replace(/\s+\d+\s*$/, '').trim() || rawTitle.trim();
+  const scan = src.agency_id != null
+    ? c.env.DB.prepare('SELECT title FROM properties WHERE agency_id = ?').bind(src.agency_id)
+    : c.env.DB.prepare('SELECT title FROM properties WHERE owner_user_id = ?').bind(c.var.user.id);
+  const siblings = (await scan.all<{ title: string }>()).results;
+  const re = new RegExp(`^${base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:\\s+(\\d+))?\\s*$`, 'i');
+  let max = 1;
+  for (const s of siblings) {
+    const m = re.exec((s.title ?? '').trim());
+    if (m) max = Math.max(max, m[1] ? Number(m[1]) : 1);
+  }
+  const title = `${base} ${max + 1}`.slice(0, 160);
+
+  const ins = await c.env.DB
+    .prepare(
+      `INSERT INTO properties
+        (owner_kind, agency_id, branch_id, owner_user_id, operation, kind, title, description,
+         price, currency, price_period, area_m2, rooms, capacity, available_from, available_until,
+         bathrooms, amenities, address, city, province, lat, lng, status, published)
+       SELECT owner_kind, agency_id, branch_id, owner_user_id, operation, kind, ?, description,
+         price, currency, price_period, area_m2, rooms, capacity, available_from, available_until,
+         bathrooms, amenities, address, city, province, lat, lng, 'disponible', published
+       FROM properties WHERE id = ?`,
+    )
+    .bind(title, id)
+    .run();
+  const newId = ins.meta.last_row_id;
+  if (!newId) return bad(c, 'No se pudo copiar la propiedad');
+
+  // Encargo (propietario): se copia el de la original, apuntando a la copia (no-op si no tiene).
+  await c.env.DB
+    .prepare(
+      `INSERT INTO mandates (agency_id, property_id, client_id, exclusive, commission_pct, ends_at)
+       SELECT agency_id, ?, client_id, exclusive, commission_pct, ends_at
+       FROM mandates WHERE property_id = ? AND agency_id = ?`,
+    )
+    .bind(newId, id, src.agency_id)
+    .run();
+
+  // Duplicar cada foto: copio el objeto de R2 a una key nueva bajo prop/<id de la copia>/.
+  const media = (await c.env.DB
+    .prepare('SELECT r2_key, kind, sort FROM property_media WHERE property_id = ? ORDER BY sort')
+    .bind(id)
+    .all<{ r2_key: string; kind: string; sort: number }>()).results;
+  let photos = 0;
+  for (const m of media) {
+    try {
+      const obj = await c.env.MEDIA.get(m.r2_key);
+      if (!obj) continue;
+      const ext = (m.r2_key.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 5) || 'jpg';
+      const key = `prop/${newId}/${crypto.randomUUID()}.${ext}`;
+      await c.env.MEDIA.put(key, await obj.arrayBuffer(), { httpMetadata: obj.httpMetadata });
+      await c.env.DB
+        .prepare('INSERT INTO property_media (property_id, r2_key, kind, sort) VALUES (?, ?, ?, ?)')
+        .bind(newId, key, m.kind, m.sort)
+        .run();
+      photos++;
+    } catch { /* salta la foto que falle */ }
+  }
+
+  const property = await c.env.DB.prepare('SELECT * FROM properties WHERE id = ?').bind(newId).first();
+  return c.json({ property, copied: { photos } }, 201);
+});
+
 // ── Fotos de la propiedad (R2). Se sirven públicas en GET /media/<key>. ──
 
 const MAX_BYTES = 8 * 1024 * 1024;
@@ -451,5 +533,67 @@ properties.delete('/:id/bookings/:bid', async (c) => {
   const prop = await loadManageable(c.env.DB, c.var.user.id, id);
   if (!prop) return notFound(c, 'Propiedad no encontrada');
   await c.env.DB.prepare('DELETE FROM bookings WHERE id = ? AND property_id = ?').bind(bid, id).run();
+  return c.json({ success: true });
+});
+
+// ── Precios por temporada (quincena) ──
+// Planilla interna de tarifas para cotizar: una fila por (propiedad, mes). `price_month`
+// vale para todo el mes; día/semana varían por quincena. Todo ARS, todo opcional. No
+// gatea por suscripción (igual que bookings/media), solo por `loadManageable`.
+const SEASON_FIELDS = ['price_month', 'price_day_q1', 'price_week_q1', 'price_day_q2', 'price_week_q2'] as const;
+
+properties.get('/:id/season-prices', async (c) => {
+  const id = num(c.req.param('id'));
+  if (id == null) return bad(c, 'id inválido');
+  const prop = await loadManageable(c.env.DB, c.var.user.id, id);
+  if (!prop) return notFound(c, 'Propiedad no encontrada');
+  const res = await c.env.DB
+    .prepare(`SELECT month, ${SEASON_FIELDS.join(', ')} FROM property_season_prices WHERE property_id = ? ORDER BY month`)
+    .bind(id)
+    .all();
+  return c.json({ rates: res.results });
+});
+
+// Upsert de un mes. Si los 5 importes quedan vacíos, borra la fila.
+properties.put('/:id/season-prices/:month', async (c) => {
+  const id = num(c.req.param('id'));
+  const month = num(c.req.param('month'));
+  if (id == null) return bad(c, 'id inválido');
+  if (month == null || month < 1 || month > 12) return bad(c, 'mes inválido (1-12)');
+  const prop = await loadManageable(c.env.DB, c.var.user.id, id);
+  if (!prop) return notFound(c, 'Propiedad no encontrada');
+
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  const vals = SEASON_FIELDS.map((k) => {
+    const n = num(body[k]);
+    return n != null && n >= 0 ? n : null;
+  });
+  if (vals.every((v) => v == null)) {
+    await c.env.DB.prepare('DELETE FROM property_season_prices WHERE property_id = ? AND month = ?').bind(id, month).run();
+    return c.json({ deleted: true, month });
+  }
+  await c.env.DB
+    .prepare(
+      `INSERT INTO property_season_prices (property_id, month, ${SEASON_FIELDS.join(', ')})
+       VALUES (?, ?, ${SEASON_FIELDS.map(() => '?').join(', ')})
+       ON CONFLICT(property_id, month) DO UPDATE SET
+         ${SEASON_FIELDS.map((k) => `${k} = excluded.${k}`).join(', ')}, updated_at = datetime('now')`,
+    )
+    .bind(id, month, ...vals)
+    .run();
+  const rate = await c.env.DB
+    .prepare(`SELECT month, ${SEASON_FIELDS.join(', ')} FROM property_season_prices WHERE property_id = ? AND month = ?`)
+    .bind(id, month)
+    .first();
+  return c.json({ rate });
+});
+
+properties.delete('/:id/season-prices/:month', async (c) => {
+  const id = num(c.req.param('id'));
+  const month = num(c.req.param('month'));
+  if (id == null || month == null) return bad(c, 'id inválido');
+  const prop = await loadManageable(c.env.DB, c.var.user.id, id);
+  if (!prop) return notFound(c, 'Propiedad no encontrada');
+  await c.env.DB.prepare('DELETE FROM property_season_prices WHERE property_id = ? AND month = ?').bind(id, month).run();
   return c.json({ success: true });
 });

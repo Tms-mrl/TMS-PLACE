@@ -11,6 +11,7 @@ import { prefetchClients } from '../lib/clients-cache';
 import { CalendarModal } from './calendar-modal';
 import { AskModal, PhotoManager, PropertyForm } from './property-form';
 import { PropertyRow } from './property-row';
+import { SeasonPricesModal } from './season-prices-modal';
 import { StatsModal } from './stats-modal';
 import { Button } from './ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
@@ -163,6 +164,7 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
   const [editing, setEditing] = useState<Property | null>(null);
   const [cal, setCal] = useState<Property | null>(null);
   const [stats, setStats] = useState<Property | null>(null);
+  const [seasonP, setSeasonP] = useState<Property | null>(null);
   const [sort, setSort] = useState<{ key: string; dir: 1 | -1 } | null>(null);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [f, setF] = useState({ ...EMPTY_F });
@@ -232,9 +234,9 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
       if (f.currency !== 'all' && p.currency !== f.currency) return false;
       if (p.price > Number(f.priceMax)) return false;
     }
-    // Capacidad EXACTA, no mínima: pedir "1 persona" y que aparezcan las de 2, 3 y 4
-    // convierte el filtro en ruido (decisión de Charly, 2026-08-07).
-    if (f.capacity && p.capacity !== Number(f.capacity)) return false;
+    // "Personas" ya no filtra: reordena (ver `sorted`). Pedir N personas trae todo, con
+    // las de N y las más grandes arriba (a pedido de Tomy, 2026-09-07 — revierte la
+    // "capacidad exacta" de Charly del 2026-08-07).
     if (f.dateFrom || f.dateTo) {
       // Solo excluye si hay una reserva que se solape. "Disponible desde/hasta" es la
       // temporada habitual del anuncio, no un bloqueo de fechas: si no hay una reserva
@@ -248,11 +250,21 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
   });
   const dirty = JSON.stringify(f) !== JSON.stringify(EMPTY_F);
 
+  // Orden por "Personas": no oculta nada. Primero la capacidad pedida y las mayores
+  // (ascendente: N, N+1, N+2…), después las menores (N-1, N-2…) y al final las que no
+  // tienen el dato cargado. Un lugar para N personas sirve si entran N o más. Un orden
+  // manual elegido en el <Select> (Precio, Título…) tiene prioridad sobre esto.
+  const capN = Number(f.capacity);
+  const capRank = (cap: number | null): [number, number] =>
+    cap == null ? [2, 0] : cap >= capN ? [0, cap - capN] : [1, capN - cap];
   const sorted = sort ? [...filtered].sort((a, b) => {
     const k = sort.key as keyof Property;
     if (k === 'price') return ((a.price ?? -Infinity) - (b.price ?? -Infinity)) * sort.dir;
     const av = String(a[k] ?? '').toLowerCase(); const bv = String(b[k] ?? '').toLowerCase();
     return av < bv ? -sort.dir : av > bv ? sort.dir : 0;
+  }) : (f.capacity && capN > 0) ? [...filtered].sort((a, b) => {
+    const [ga, da] = capRank(a.capacity); const [gb, db] = capRank(b.capacity);
+    return ga - gb || da - db;
   }) : filtered;
 
   // Con Desde/Hasta activo, el chip de Estado tiene que hablar DEL RANGO, no del estado
@@ -375,7 +387,7 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
           </SelectContent>
         </Select>
         <input type="number" placeholder="Precio máx" value={f.priceMax} onChange={(e) => set('priceMax', e.target.value)} style={{ maxWidth: 120 }} />
-        <input type="number" min={1} placeholder="Personas" title="Capacidad exacta: 4 muestra solo las de 4 personas" value={f.capacity} onChange={(e) => set('capacity', e.target.value)} style={{ maxWidth: 120 }} />
+        <input type="number" min={1} placeholder="Personas" title="Ordena por capacidad: primero las de esa cantidad y las más grandes. No oculta ninguna." value={f.capacity} onChange={(e) => set('capacity', e.target.value)} style={{ maxWidth: 120 }} />
         <DateRangePicker from={f.dateFrom} to={f.dateTo} onChange={(dateFrom, dateTo) => setF((s) => ({ ...s, dateFrom, dateTo }))} />
       </div>
       <div className={selected.size > 0 ? 'bulk-bar-wrap open' : 'bulk-bar-wrap'}>
@@ -438,6 +450,7 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
               checked={selected.has(p.id)} selectMode={selected.size > 0} onSelect={() => toggleSel(p.id)}
               onToggle={() => setExpanded((e) => (e === p.id ? null : p.id))}
               onManage={() => setManaging(p)} onEdit={() => setEditing(p)} onCalendar={() => setCal(p)}
+              onSeasonPrices={() => setSeasonP(p)}
               onLightbox={openLightbox} onStats={() => setStats(p)} onReload={reload} />
           ))}
         </div>
@@ -447,6 +460,7 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
       {managing && <PhotoManager property={managing} onClose={() => setManaging(null)} onSaved={reload} />}
       {cal && <CalendarModal property={cal} onClose={() => { setCal(null); reload(); }} />}
       {stats && <StatsModal property={stats} onClose={() => setStats(null)} />}
+      {seasonP && <SeasonPricesModal property={seasonP} onClose={() => setSeasonP(null)} />}
       {lb && <Lightbox media={lb} onClose={() => setLb(null)} />}
     </div>
   );

@@ -81,6 +81,16 @@ export type Booking = {
   guest_name: string | null; notes: string | null;
 };
 
+/** Tarifa por temporada de una propiedad — una por mes. `price_month` vale para todo el
+ *  mes; día/semana cambian por quincena (1ª = 1-15, 2ª = 16-fin). Todo ARS, todo opcional.
+ *  Planilla interna para cotizar; no afecta la ficha pública. */
+export type SeasonPrice = {
+  month: number;
+  price_month: number | null;
+  price_day_q1: number | null; price_week_q1: number | null;
+  price_day_q2: number | null; price_week_q2: number | null;
+};
+
 export type Member = {
   member_id: number; role: string; branch_id: number | null; branch_name: string | null;
   user_id: number; name: string | null; email: string; access_token: string | null;
@@ -217,6 +227,11 @@ export const PRICE_PERIODS: { v: string; label: string; suffix: string }[] = [
   { v: 'total', label: 'Precio total', suffix: '' },
 ];
 export const PERIOD_SUFFIX: Record<string, string> = Object.fromEntries(PRICE_PERIODS.map((p) => [p.v, p.suffix]));
+
+export const MONTHS_ES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'] as const;
+/** Orden del selector de "Precios por temporada": verano (dic-mar) primero. */
+export const SEASON_MONTH_ORDER = [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] as const;
 
 export function money(price: number | null, currency = 'USD', period?: string | null): string {
   if (price == null) return 'Consultar';

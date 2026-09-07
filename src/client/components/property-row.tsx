@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import {
-  BarChart3, Bath, BedDouble, Calendar as CalendarIcon, Camera, Check, ChevronDown,
-  Eye, EyeOff, Home, Link as LinkIcon, MoreHorizontal, Pencil, Ruler,
+  BarChart3, Bath, BedDouble, Calendar as CalendarIcon, CalendarRange, Camera, Check, ChevronDown,
+  Copy, Eye, EyeOff, Home, Link as LinkIcon, MoreHorizontal, Pencil, Ruler,
   Share2, Trash2, User, Users,
 } from 'lucide-react';
 import { api } from '../lib/api';
@@ -73,9 +73,9 @@ function MenuItem({ icon, children, onClick, danger, className }: { icon: ReactN
 // ── La fila ──────────────────────────────────────────────────────────────────
 // UNA sola versión para escritorio y celular: el layout es grid y se reacomoda por CSS.
 // Antes había dos componentes (tabla + card mobile) con las mismas acciones duplicadas.
-export function PropertyRow({ p, index, expanded, checked, selectMode, shareMessage, onSelect, onToggle, onManage, onEdit, onCalendar, onLightbox, onStats, onReload }: {
+export function PropertyRow({ p, index, expanded, checked, selectMode, shareMessage, onSelect, onToggle, onManage, onEdit, onCalendar, onSeasonPrices, onLightbox, onStats, onReload }: {
   p: Property; index: number; expanded: boolean; checked: boolean; selectMode: boolean; shareMessage: string; onSelect: () => void; onToggle: () => void;
-  onManage: () => void; onEdit: () => void; onCalendar: () => void; onLightbox: (p: Property) => void; onStats: () => void; onReload: () => void;
+  onManage: () => void; onEdit: () => void; onCalendar: () => void; onSeasonPrices: () => void; onLightbox: (p: Property) => void; onStats: () => void; onReload: () => void;
 }) {
   const confirm = useConfirm();
 
@@ -87,6 +87,20 @@ export function PropertyRow({ p, index, expanded, checked, selectMode, shareMess
     if (!(await confirm(`¿Eliminar "${p.title}"? No se puede deshacer.`, { destructive: true, confirmLabel: 'Eliminar' }))) return;
     try { await api(`/api/properties/${p.id}`, { method: 'DELETE' }); onReload(); }
     catch (e) { toast(String((e as Error).message), 'err'); }
+  }
+  // Duplica la propiedad: copia datos + fotos + propietario y le pone el próximo número
+  // libre al título ("Casa" → "Casa 2" → "Casa 3"). El ref evita duplicar dos veces por
+  // doble click (el menú se cierra al instante, no hay estado visible que deshabilitar).
+  const dupBusy = useRef(false);
+  async function duplicate() {
+    if (dupBusy.current) return;
+    dupBusy.current = true;
+    try {
+      const r = await api<{ property: Property }>(`/api/properties/${p.id}/copy`, { method: 'POST' });
+      toast(`Copiada como "${r.property.title}"`, 'ok');
+      onReload();
+    } catch (e) { toast(String((e as Error).message), 'err'); }
+    finally { dupBusy.current = false; }
   }
   function copyLink() {
     if (!p.external_url) { toast('Esta propiedad no tiene link del aviso — cargalo en Editar', 'err'); return; }
@@ -189,7 +203,9 @@ export function PropertyRow({ p, index, expanded, checked, selectMode, shareMess
         <RowMenu label="Más opciones" icon={<MoreHorizontal className="h-3.5 w-3.5" />}>
           <MenuItem className="only-mob" icon={<Pencil className="h-4 w-4" />} onClick={onEdit}>Editar</MenuItem>
           <MenuItem icon={<LinkIcon className="h-4 w-4" />} onClick={copyLink}>Copiar link</MenuItem>
+          <MenuItem icon={<Copy className="h-4 w-4" />} onClick={duplicate}>Duplicar propiedad</MenuItem>
           <MenuItem icon={<Camera className="h-4 w-4" />} onClick={onManage}>Gestionar fotos</MenuItem>
+          <MenuItem icon={<CalendarRange className="h-4 w-4" />} onClick={onSeasonPrices}>Precios por temporada</MenuItem>
           <MenuItem icon={<BarChart3 className="h-4 w-4" />} onClick={onStats}>Estadísticas de visitas</MenuItem>
           <MenuItem icon={<ChevronDown className="h-4 w-4" />} onClick={onToggle}>{expanded ? 'Ocultar detalle' : 'Ver detalle'}</MenuItem>
           <hr className="rmenu-sep" />
