@@ -22,6 +22,22 @@ const numStr = (v: number | null) => (v != null ? String(v) : '');
 const toDraft = (r: SeasonPrice | undefined): Draft =>
   r ? (Object.fromEntries(FIELDS.map((k) => [k, numStr(r[k])])) as Draft) : { ...EMPTY };
 
+// Agrupa los dígitos de a 3 con "." (120000 → "120.000"). Recibe y devuelve string.
+const groupThousands = (digits: string) => digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+
+// Input de monto: guarda los dígitos crudos en el draft, pero los muestra con puntos de
+// miles mientras se escribe (un <input type=number> no deja pintar el "."). Al guardar,
+// `save()` hace Number(digitos) directo.
+function MoneyInput({ value, onChange }: { value: string; onChange: (digits: string) => void }) {
+  return (
+    <input
+      type="text" inputMode="numeric" placeholder="$"
+      value={groupThousands(value)}
+      onChange={(e) => onChange(e.target.value.replace(/\D/g, '').replace(/^0+(?=\d)/, ''))}
+    />
+  );
+}
+
 // Resumen corto de una tarifa cargada, para el chip del mes.
 function summarize(r: SeasonPrice): string {
   const parts: string[] = [];
@@ -97,8 +113,7 @@ export function SeasonPricesModal({ property, onClose }: { property: Property; o
 
         <label className="fld">
           <span className="fld-lbl">Precio por mes (todo el mes)</span>
-          <input type="number" min={0} placeholder="$"
-            value={d.price_month} onChange={(e) => set('price_month', e.target.value)} />
+          <MoneyInput value={d.price_month} onChange={(v) => set('price_month', v)} />
         </label>
 
         <div className="season-grid">
@@ -106,14 +121,14 @@ export function SeasonPricesModal({ property, onClose }: { property: Property; o
           <b>1ª quincena</b>
           <b>2ª quincena</b>
           <span className="fld-lbl">Por día</span>
-          <input type="number" min={0} placeholder="$" value={d.price_day_q1} onChange={(e) => set('price_day_q1', e.target.value)} />
-          <input type="number" min={0} placeholder="$" value={d.price_day_q2} onChange={(e) => set('price_day_q2', e.target.value)} />
+          <MoneyInput value={d.price_day_q1} onChange={(v) => set('price_day_q1', v)} />
+          <MoneyInput value={d.price_day_q2} onChange={(v) => set('price_day_q2', v)} />
           <span className="fld-lbl">Por semana</span>
-          <input type="number" min={0} placeholder="$" value={d.price_week_q1} onChange={(e) => set('price_week_q1', e.target.value)} />
-          <input type="number" min={0} placeholder="$" value={d.price_week_q2} onChange={(e) => set('price_week_q2', e.target.value)} />
+          <MoneyInput value={d.price_week_q1} onChange={(v) => set('price_week_q1', v)} />
+          <MoneyInput value={d.price_week_q2} onChange={(v) => set('price_week_q2', v)} />
           <span className="fld-lbl">Por quincena</span>
-          <input type="number" min={0} placeholder="$" value={d.price_fortnight_q1} onChange={(e) => set('price_fortnight_q1', e.target.value)} />
-          <input type="number" min={0} placeholder="$" value={d.price_fortnight_q2} onChange={(e) => set('price_fortnight_q2', e.target.value)} />
+          <MoneyInput value={d.price_fortnight_q1} onChange={(v) => set('price_fortnight_q1', v)} />
+          <MoneyInput value={d.price_fortnight_q2} onChange={(v) => set('price_fortnight_q2', v)} />
         </div>
 
         <Button disabled={busy} onClick={save}>
