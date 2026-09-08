@@ -540,7 +540,11 @@ properties.delete('/:id/bookings/:bid', async (c) => {
 // Planilla interna de tarifas para cotizar: una fila por (propiedad, mes). `price_month`
 // vale para todo el mes; día/semana varían por quincena. Todo ARS, todo opcional. No
 // gatea por suscripción (igual que bookings/media), solo por `loadManageable`.
-const SEASON_FIELDS = ['price_month', 'price_day_q1', 'price_week_q1', 'price_day_q2', 'price_week_q2'] as const;
+const SEASON_FIELDS = [
+  'price_month',
+  'price_day_q1', 'price_week_q1', 'price_fortnight_q1',
+  'price_day_q2', 'price_week_q2', 'price_fortnight_q2',
+] as const;
 
 properties.get('/:id/season-prices', async (c) => {
   const id = num(c.req.param('id'));

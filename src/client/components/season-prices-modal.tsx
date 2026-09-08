@@ -7,22 +7,20 @@ import { Button } from './ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { useConfirm } from './ui/use-confirm';
 
-// Planilla interna de tarifas por temporada. Una fila por mes: "por mes" vale para todo
-// el mes; "por día"/"por semana" se cargan por quincena (1ª = 1-15, 2ª = 16-fin). Pesos,
-// todo opcional. No toca la ficha pública — es referencia para cotizar.
-const FIELDS = ['price_month', 'price_day_q1', 'price_week_q1', 'price_day_q2', 'price_week_q2'] as const;
+// Planilla interna de tarifas por temporada. Una fila por mes: "por mes" vale para todo el
+// mes; "por día"/"por semana"/"por quincena" se cargan por quincena (1ª = 1-15, 2ª = 16-fin).
+// Pesos, todo opcional. No toca la ficha pública — es referencia para cotizar.
+const FIELDS = [
+  'price_month',
+  'price_day_q1', 'price_week_q1', 'price_fortnight_q1',
+  'price_day_q2', 'price_week_q2', 'price_fortnight_q2',
+] as const;
 type Draft = Record<(typeof FIELDS)[number], string>;
-const EMPTY: Draft = { price_month: '', price_day_q1: '', price_week_q1: '', price_day_q2: '', price_week_q2: '' };
+const EMPTY: Draft = Object.fromEntries(FIELDS.map((k) => [k, ''])) as Draft;
 
 const numStr = (v: number | null) => (v != null ? String(v) : '');
 const toDraft = (r: SeasonPrice | undefined): Draft =>
-  r
-    ? {
-        price_month: numStr(r.price_month),
-        price_day_q1: numStr(r.price_day_q1), price_week_q1: numStr(r.price_week_q1),
-        price_day_q2: numStr(r.price_day_q2), price_week_q2: numStr(r.price_week_q2),
-      }
-    : { ...EMPTY };
+  r ? (Object.fromEntries(FIELDS.map((k) => [k, numStr(r[k])])) as Draft) : { ...EMPTY };
 
 // Resumen corto de una tarifa cargada, para el chip del mes.
 function summarize(r: SeasonPrice): string {
@@ -32,6 +30,8 @@ function summarize(r: SeasonPrice): string {
   if (day != null) parts.push(`día ${money(day, 'ARS')}`);
   const week = r.price_week_q1 ?? r.price_week_q2;
   if (week != null) parts.push(`sem ${money(week, 'ARS')}`);
+  const fort = r.price_fortnight_q1 ?? r.price_fortnight_q2;
+  if (fort != null) parts.push(`quinc ${money(fort, 'ARS')}`);
   return parts.join(' · ') || 'sin datos';
 }
 
@@ -111,6 +111,9 @@ export function SeasonPricesModal({ property, onClose }: { property: Property; o
           <span className="fld-lbl">Por semana</span>
           <input type="number" min={0} placeholder="$" value={d.price_week_q1} onChange={(e) => set('price_week_q1', e.target.value)} />
           <input type="number" min={0} placeholder="$" value={d.price_week_q2} onChange={(e) => set('price_week_q2', e.target.value)} />
+          <span className="fld-lbl">Por quincena</span>
+          <input type="number" min={0} placeholder="$" value={d.price_fortnight_q1} onChange={(e) => set('price_fortnight_q1', e.target.value)} />
+          <input type="number" min={0} placeholder="$" value={d.price_fortnight_q2} onChange={(e) => set('price_fortnight_q2', e.target.value)} />
         </div>
 
         <Button disabled={busy} onClick={save}>

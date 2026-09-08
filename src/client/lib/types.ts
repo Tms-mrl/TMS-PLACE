@@ -87,8 +87,8 @@ export type Booking = {
 export type SeasonPrice = {
   month: number;
   price_month: number | null;
-  price_day_q1: number | null; price_week_q1: number | null;
-  price_day_q2: number | null; price_week_q2: number | null;
+  price_day_q1: number | null; price_week_q1: number | null; price_fortnight_q1: number | null;
+  price_day_q2: number | null; price_week_q2: number | null; price_fortnight_q2: number | null;
 };
 
 export type Member = {
