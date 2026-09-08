@@ -283,10 +283,12 @@ properties.delete('/:id', async (c) => {
   return c.json({ success: true });
 });
 
-// Duplicar una propiedad (datos + fotos + propietario). El título de la copia queda como
-// "<título> copia 1"; la próxima copia de esa familia es "copia 2", "copia 3", etc.
-// Respeta el estado de publicación de la original; nace sin reservas, sin link de aviso
-// (external_url es único) y con estado 'disponible'.
+// Duplicar una propiedad (datos + fotos + propietario + precios por temporada). El título
+// de la copia queda como "<título> copia 1"; la próxima copia de esa familia es "copia 2",
+// "copia 3", etc. Respeta el estado de publicación de la original; nace sin reservas, sin
+// link de aviso (external_url es único) y con estado 'disponible'. Las fotos NO se
+// duplican en R2: las filas nuevas apuntan a las MISMAS keys (se comparte el binario para
+// ahorrar espacio; el borrado de foto ya está referenciado, ver DELETE /:id/media/:mid).
 properties.post('/:id/copy', async (c) => {
   const id = num(c.req.param('id'));
   if (id == null) return bad(c, 'id inválido');
@@ -340,29 +342,30 @@ properties.post('/:id/copy', async (c) => {
     .bind(newId, id, src.agency_id)
     .run();
 
-  // Duplicar cada foto: copio el objeto de R2 a una key nueva bajo prop/<id de la copia>/.
-  const media = (await c.env.DB
-    .prepare('SELECT r2_key, kind, sort FROM property_media WHERE property_id = ? ORDER BY sort')
-    .bind(id)
-    .all<{ r2_key: string; kind: string; sort: number }>()).results;
-  let photos = 0;
-  for (const m of media) {
-    try {
-      const obj = await c.env.MEDIA.get(m.r2_key);
-      if (!obj) continue;
-      const ext = (m.r2_key.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 5) || 'jpg';
-      const key = `prop/${newId}/${crypto.randomUUID()}.${ext}`;
-      await c.env.MEDIA.put(key, await obj.arrayBuffer(), { httpMetadata: obj.httpMetadata });
-      await c.env.DB
-        .prepare('INSERT INTO property_media (property_id, r2_key, kind, sort) VALUES (?, ?, ?, ?)')
-        .bind(newId, key, m.kind, m.sort)
-        .run();
-      photos++;
-    } catch { /* salta la foto que falle */ }
-  }
+  // Precios por temporada: se copian tal cual (una fila por mes) a la propiedad nueva.
+  await c.env.DB
+    .prepare(
+      `INSERT INTO property_season_prices
+        (property_id, month, price_month, price_day_q1, price_week_q1, price_fortnight_q1, price_day_q2, price_week_q2, price_fortnight_q2)
+       SELECT ?, month, price_month, price_day_q1, price_week_q1, price_fortnight_q1, price_day_q2, price_week_q2, price_fortnight_q2
+       FROM property_season_prices WHERE property_id = ?`,
+    )
+    .bind(newId, id)
+    .run();
+
+  // Fotos: se comparten. Las filas nuevas apuntan a la MISMA r2_key que la original — no
+  // se copia el binario en R2 (ahorro de espacio). El DELETE de foto borra el objeto solo
+  // si ninguna otra fila lo referencia.
+  const media = await c.env.DB
+    .prepare(
+      `INSERT INTO property_media (property_id, r2_key, kind, sort)
+       SELECT ?, r2_key, kind, sort FROM property_media WHERE property_id = ?`,
+    )
+    .bind(newId, id)
+    .run();
 
   const property = await c.env.DB.prepare('SELECT * FROM properties WHERE id = ?').bind(newId).first();
-  return c.json({ property, copied: { photos } }, 201);
+  return c.json({ property, copied: { photos: media.meta.changes ?? 0 } }, 201);
 });
 
 // ── Fotos de la propiedad (R2). Se sirven públicas en GET /media/<key>. ──
@@ -413,7 +416,8 @@ properties.get('/:id/media', async (c) => {
   return c.json({ media: res.results });
 });
 
-// Borrar una foto (de R2 + fila).
+// Borrar una foto (fila + objeto de R2). El objeto de R2 se borra solo si ninguna otra
+// fila lo referencia — al duplicar una propiedad las copias comparten la misma r2_key.
 properties.delete('/:id/media/:mid', async (c) => {
   const id = num(c.req.param('id'));
   const mid = num(c.req.param('mid'));
@@ -425,8 +429,12 @@ properties.delete('/:id/media/:mid', async (c) => {
     .bind(mid, id)
     .first<{ r2_key: string }>();
   if (!m) return notFound(c, 'Foto no encontrada');
-  await c.env.MEDIA.delete(m.r2_key);
   await c.env.DB.prepare('DELETE FROM property_media WHERE id = ?').bind(mid).run();
+  const stillUsed = await c.env.DB
+    .prepare('SELECT 1 FROM property_media WHERE r2_key = ? LIMIT 1')
+    .bind(m.r2_key)
+    .first();
+  if (!stillUsed) await c.env.MEDIA.delete(m.r2_key);
   return c.json({ success: true });
 });
 
