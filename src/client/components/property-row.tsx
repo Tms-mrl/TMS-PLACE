@@ -88,9 +88,9 @@ export function PropertyRow({ p, index, expanded, checked, selectMode, shareMess
     try { await api(`/api/properties/${p.id}`, { method: 'DELETE' }); onReload(); }
     catch (e) { toast(String((e as Error).message), 'err'); }
   }
-  // Duplica la propiedad: copia datos + fotos + propietario y le pone el próximo número
-  // libre al título ("Casa" → "Casa 2" → "Casa 3"). El ref evita duplicar dos veces por
-  // doble click (el menú se cierra al instante, no hay estado visible que deshabilitar).
+  // Duplica la propiedad: copia datos + fotos + propietario y el título queda como
+  // "<título> copia 1" ("copia 2", "copia 3"… en las siguientes). El ref evita duplicar
+  // dos veces por doble click (el menú se cierra al instante, no hay estado que deshabilitar).
   const dupBusy = useRef(false);
   async function duplicate() {
     if (dupBusy.current) return;

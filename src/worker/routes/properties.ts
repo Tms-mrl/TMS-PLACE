@@ -276,8 +276,8 @@ properties.delete('/:id', async (c) => {
   return c.json({ success: true });
 });
 
-// Duplicar una propiedad (datos + fotos + propietario). El título de la copia lleva el
-// primer número libre: "Casa" → "Casa 2"; copiar de nuevo (o copiar "Casa 2") → "Casa 3".
+// Duplicar una propiedad (datos + fotos + propietario). El título de la copia queda como
+// "<título> copia 1"; la próxima copia de esa familia es "copia 2", "copia 3", etc.
 // Respeta el estado de publicación de la original; nace sin reservas, sin link de aviso
 // (external_url es único) y con estado 'disponible'.
 properties.post('/:id/copy', async (c) => {
@@ -291,21 +291,21 @@ properties.post('/:id/copy', async (c) => {
   const sub = await getSubStatus(c.env.DB, mine.agency.id);
   if (sub?.blocked) return paymentRequired(c, 'Trial vencido: contactá a Coopen para reactivar la gestión');
 
-  // Base del título = título sin el número final. Escaneo la cartera por "base" y "base N"
-  // y tomo el mayor: la copia es max+1. Un título sin número cuenta como 1 → la 1ª copia es 2.
+  // Base del título = título sin un " copia N" final. Escaneo la cartera por "<base> copia N",
+  // tomo el mayor N (0 si no hay ninguna) y la copia nueva es "copia max+1" → la 1ª es "copia 1".
   const rawTitle = String(src.title ?? '');
-  const base = rawTitle.replace(/\s+\d+\s*$/, '').trim() || rawTitle.trim();
+  const base = rawTitle.replace(/\s+copia(?:\s+\d+)?\s*$/i, '').trim() || rawTitle.trim();
   const scan = src.agency_id != null
     ? c.env.DB.prepare('SELECT title FROM properties WHERE agency_id = ?').bind(src.agency_id)
     : c.env.DB.prepare('SELECT title FROM properties WHERE owner_user_id = ?').bind(c.var.user.id);
   const siblings = (await scan.all<{ title: string }>()).results;
-  const re = new RegExp(`^${base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:\\s+(\\d+))?\\s*$`, 'i');
-  let max = 1;
+  const re = new RegExp(`^${base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s+copia\\s+(\\d+)\\s*$`, 'i');
+  let max = 0;
   for (const s of siblings) {
     const m = re.exec((s.title ?? '').trim());
-    if (m) max = Math.max(max, m[1] ? Number(m[1]) : 1);
+    if (m) max = Math.max(max, Number(m[1]));
   }
-  const title = `${base} ${max + 1}`.slice(0, 160);
+  const title = `${base} copia ${max + 1}`.slice(0, 160);
 
   const ins = await c.env.DB
     .prepare(
