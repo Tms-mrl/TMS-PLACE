@@ -5,6 +5,8 @@ dist/
 *.log
 .claude/scheduled_tasks.lock
 .claude/settings.local.json
+# `wrangler r2 object get` sin --pipe escribe el objeto a ./<key> al probar en local
+/prop/
 
 # Cache/estado de trabajo del importador de El Muelle (scripts/import-elmuelle.mjs).
 # listings.json y el HTML cacheado son regenerables con `scrape`; el .sql final que
