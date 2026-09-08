@@ -93,10 +93,6 @@ export function SeasonPricesModal({ property, onClose }: { property: Property; o
   return (
     <Modal title={`Precios por temporada · ${property.title}`} onClose={onClose}>
       <div className="form">
-        <p className="muted small" style={{ margin: 0 }}>
-          Tarifas de referencia para cotizar, en pesos. Es interno: no cambia el aviso público.
-        </p>
-
         <label className="fld">
           <span className="fld-lbl">Mes</span>
           <Select value={String(month)} onValueChange={(v) => pickMonth(Number(v))}>
