@@ -197,7 +197,8 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
     setSelected(new Set()); reload();
   }
   // Compartir por WhatsApp: un bloque por propiedad separado por un renglón en blanco —
-  //   <título>            (los títulos ya traen "- dirección, ciudad"; si no, se le suma acá)
+  //   🏡<nombre> - 📍<dirección, ciudad>   (el título de la cartera ya trae "- dir, ciudad";
+  //                                          si no, se le suma acá antes de partirlo)
   //   <link del aviso>
   //   <precio>            ← calculado desde "Precios por temporada" según el rango del filtro
   // El precio se omite si no hay filtro de fechas o la propiedad no tiene esa tarifa.
@@ -211,10 +212,13 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
     const dFrom = f.dateFrom || f.dateTo;
     const dTo = f.dateTo || f.dateFrom;
     const blocks = withUrl.map((p) => {
-      // El título de la cartera ya incluye "- dirección, ciudad" (migración 0022). Para una
-      // propiedad nueva que no lo tenga, se le agrega acá para que el mensaje no quede pelado.
       const where = [p.address, p.city].filter(Boolean).join(', ');
-      const l1 = where && p.address && !p.title.includes(p.address) ? `${p.title} - ${where}` : p.title;
+      // Base = título (que ya suele traer "- dirección, ciudad" por la 0022); si es una
+      // propiedad nueva sin eso, se lo sumamos. Después partimos en el último " - " para
+      // meter 🏡 antes del nombre y 📍 antes de la ubicación.
+      const base = where && p.address && !p.title.includes(p.address) ? `${p.title} - ${where}` : p.title;
+      const cut = base.lastIndexOf(' - ');
+      const l1 = cut === -1 ? `🏡${base}` : `🏡${base.slice(0, cut)} - 📍${base.slice(cut + 3)}`;
       const lines = [l1, p.external_url as string];
       const price = dFrom ? quoteForRange(p.season_prices, dFrom, dTo) : null;
       if (price != null) lines.push(`$${Math.round(price).toLocaleString('es-AR')}`);
