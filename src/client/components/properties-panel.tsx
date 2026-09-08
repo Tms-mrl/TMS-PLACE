@@ -245,8 +245,8 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
     if (f.branch && String(p.branch_id) !== f.branch) return false;
     if (f.kind && (p.kind || '') !== f.kind) return false;
     if (f.priced) {
-      // "Tiene precio" = precio fijo cargado O alguna tarifa en "Precios por temporada".
-      const hasPrice = p.price != null || (!!p.season_prices && p.season_prices !== '[]');
+      // Solo mira "Precios por temporada" — el precio fijo (p.price) no cuenta acá.
+      const hasPrice = !!p.season_prices && p.season_prices !== '[]';
       if (f.priced === 'yes' && !hasPrice) return false;
       if (f.priced === 'no' && hasPrice) return false;
     }
@@ -409,7 +409,7 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
           </SelectContent>
         </Select>
         <Select value={f.priced || ALL} onValueChange={(v) => set('priced', v === ALL ? '' : v)}>
-          <SelectTrigger className="w-auto min-w-[130px]" title="Precio fijo o tarifa por temporada cargada"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="w-auto min-w-[130px]" title="Tiene (o no) tarifa cargada en Precios por temporada"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL}>Precio</SelectItem>
             <SelectItem value="yes">Con precio</SelectItem>
