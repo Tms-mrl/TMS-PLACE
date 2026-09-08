@@ -73,9 +73,9 @@ function MenuItem({ icon, children, onClick, danger, className }: { icon: ReactN
 // ── La fila ──────────────────────────────────────────────────────────────────
 // UNA sola versión para escritorio y celular: el layout es grid y se reacomoda por CSS.
 // Antes había dos componentes (tabla + card mobile) con las mismas acciones duplicadas.
-export function PropertyRow({ p, index, expanded, checked, selectMode, selectedCount, shareMessage, onSelect, onToggle, onManage, onEdit, onCalendar, onSeasonPrices, onShareAll, onLightbox, onStats, onReload }: {
-  p: Property; index: number; expanded: boolean; checked: boolean; selectMode: boolean; selectedCount: number; shareMessage: string; onSelect: () => void; onToggle: () => void;
-  onManage: () => void; onEdit: () => void; onCalendar: () => void; onSeasonPrices: () => void; onShareAll: () => void; onLightbox: (p: Property) => void; onStats: () => void; onReload: () => void;
+export function PropertyRow({ p, index, expanded, checked, selectMode, selectedCount, onSelect, onToggle, onManage, onEdit, onCalendar, onSeasonPrices, onShare, onShareAll, onLightbox, onStats, onReload }: {
+  p: Property; index: number; expanded: boolean; checked: boolean; selectMode: boolean; selectedCount: number; onSelect: () => void; onToggle: () => void;
+  onManage: () => void; onEdit: () => void; onCalendar: () => void; onSeasonPrices: () => void; onShare: () => void; onShareAll: () => void; onLightbox: (p: Property) => void; onStats: () => void; onReload: () => void;
 }) {
   const confirm = useConfirm();
 
@@ -109,14 +109,6 @@ export function PropertyRow({ p, index, expanded, checked, selectMode, selectedC
       () => toast('No se pudo copiar', 'err'),
     );
   }
-  // wa.me sin número → WhatsApp abre el selector de contacto. El texto es el que la
-  // inmobiliaria escribió en Configuración y abajo el link del aviso.
-  function shareWhatsApp() {
-    if (!p.external_url) return;
-    const text = [shareMessage.trim(), p.external_url].filter(Boolean).join('\n\n');
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
-  }
-
   const c = completeness(p);
   const amen = parseAmenities(p.amenities);
   const where = [p.address, p.city, p.province].filter(Boolean).join(', ');
@@ -197,7 +189,7 @@ export function PropertyRow({ p, index, expanded, checked, selectMode, selectedC
         </button>
         {/* Con varias seleccionadas, Compartir de cualquier fila manda TODAS las
             seleccionadas (evita scrollear hasta la barra de selección de arriba). */}
-        <button type="button" className="rbtn" onClick={selectMode ? onShareAll : shareWhatsApp}
+        <button type="button" className="rbtn" onClick={selectMode ? onShareAll : onShare}
           disabled={!selectMode && !p.external_url}
           title={selectMode
             ? `Compartir las ${selectedCount} seleccionadas por WhatsApp`

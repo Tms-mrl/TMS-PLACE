@@ -36,8 +36,13 @@ properties.get('/mine', async (c) => {
               (SELECT r2_key FROM property_media pm WHERE pm.property_id = p.id ORDER BY pm.sort LIMIT 1) AS cover_key,
               (SELECT COUNT(*) FROM property_media pm2 WHERE pm2.property_id = p.id) AS photos,
               (SELECT COALESCE(SUM(count), 0) FROM property_views v WHERE v.property_id = p.id) AS views,
-              -- ¿Tiene alguna tarifa por temporada cargada? (para el filtro "con/sin precio").
-              EXISTS(SELECT 1 FROM property_season_prices sp WHERE sp.property_id = p.id) AS has_season_prices,
+              -- Tarifas por temporada embebidas: las usa el filtro "con/sin precio" y el
+              -- precio calculado al compartir por WhatsApp (según el rango de fechas del filtro).
+              COALESCE((SELECT json_group_array(json_object(
+                  'month', sp.month, 'price_month', sp.price_month,
+                  'price_day_q1', sp.price_day_q1, 'price_week_q1', sp.price_week_q1, 'price_fortnight_q1', sp.price_fortnight_q1,
+                  'price_day_q2', sp.price_day_q2, 'price_week_q2', sp.price_week_q2, 'price_fortnight_q2', sp.price_fortnight_q2))
+                FROM property_season_prices sp WHERE sp.property_id = p.id), '[]') AS season_prices,
               -- Reservas completas (no solo el rango): con esto el modal del calendario
               -- abre YA, sin esperar su propio fetch. El nombre del contacto se resuelve
               -- scopeado a la agencia de la propiedad (nunca por client_id a secas).

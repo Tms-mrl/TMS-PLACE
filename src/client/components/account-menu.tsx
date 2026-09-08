@@ -78,8 +78,6 @@ export function SettingsPanel({ user, onLogout, agency, onAgencySaved, bare }: {
   const canEditBrand = !!agency && ['admin', 'manager'].includes(agency.role);
   const [brand, setBrand] = useState('');
   const [brandSaved, setBrandSaved] = useState(false);
-  const [shareMsg, setShareMsg] = useState('');
-  const [shareMsgSaved, setShareMsgSaved] = useState(false);
 
   useEffect(() => {
     if (agency) { setWa(agency.whatsapp || ''); setLoaded(true); return; }
@@ -91,8 +89,8 @@ export function SettingsPanel({ user, onLogout, agency, onAgencySaved, bare }: {
 
   useEffect(() => {
     if (!canEditBrand) return;
-    api<{ brandName: string; shareMessage?: string }>('/api/site')
-      .then((r) => { setBrand(r.brandName); setShareMsg(r.shareMessage || ''); })
+    api<{ brandName: string }>('/api/site')
+      .then((r) => setBrand(r.brandName))
       .catch(() => {});
   }, [canEditBrand]);
 
@@ -124,14 +122,6 @@ export function SettingsPanel({ user, onLogout, agency, onAgencySaved, bare }: {
       await api('/api/site', { method: 'PUT', body: JSON.stringify({ brandName: brand.trim() }) });
       setBrandSaved(true);
       setTimeout(() => window.location.reload(), 500);
-    } catch (e) { toast(String((e as Error).message), 'err'); }
-  }
-
-  async function saveShareMsg() {
-    try {
-      await api('/api/site', { method: 'PUT', body: JSON.stringify({ shareMessage: shareMsg }) });
-      setShareMsgSaved(true);
-      setTimeout(() => setShareMsgSaved(false), 2000);
     } catch (e) { toast(String((e as Error).message), 'err'); }
   }
 
@@ -174,22 +164,6 @@ export function SettingsPanel({ user, onLogout, agency, onAgencySaved, bare }: {
             <input value={brand} onChange={(e) => setBrand(e.target.value)} placeholder="Ej: Mi Inmobiliaria" />
             <Button size="sm" onClick={saveBrand}>{brandSaved ? '✓' : 'Guardar'}</Button>
           </div>
-        </div>
-      )}
-      {canEditBrand && (
-        <div>
-          <p className="muted small" style={{ margin: '10px 0 0' }}>Mensaje para compartir por WhatsApp</p>
-          <p className="muted small" style={{ margin: '2px 0 8px' }}>
-            Desde el Inventario, “Compartir” manda este texto por WhatsApp y abajo pega el link
-            del aviso. Si compartís varias propiedades juntas, el texto va una vez y después todos los links.
-          </p>
-          <textarea
-            placeholder="Ej: ¡Hola! Te paso esta propiedad:"
-            rows={3}
-            value={shareMsg}
-            onChange={(e) => setShareMsg(e.target.value)}
-          />
-          <Button size="sm" onClick={saveShareMsg} style={{ marginTop: 8 }}>{shareMsgSaved ? '✓' : 'Guardar'}</Button>
         </div>
       )}
       {canEditBrand && <TestimonialsEditor />}

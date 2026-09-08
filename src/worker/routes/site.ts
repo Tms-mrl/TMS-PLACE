@@ -13,22 +13,11 @@ export const site = new Hono<AppEnv>();
 
 site.get('/', async (c) => {
   const logoKey = await getBrandLogoKey(c.env.DB);
-  // El mensaje para compartir por WhatsApp lo escribe la inmobiliaria en Configuración;
-  // el panel lo usa para pre-armar el texto del share. Falla blando: si la columna no
-  // está (deploy white-label todavía sin migrar), va vacío en vez de tumbar la request.
-  let shareMessage = '';
-  try {
-    const s = await c.env.DB
-      .prepare('SELECT share_message FROM site_settings WHERE id = 1')
-      .first<{ share_message: string | null }>();
-    shareMessage = s?.share_message ?? '';
-  } catch { /* columna nueva (0017) */ }
   return c.json({
     brandName: await getBrandName(c.env.DB),
     // URL lista para usar (null si la inmobiliaria no cargó logo): el cliente no tiene
     // por qué saber cómo se arma una key de R2.
     logoUrl: logoKey ? mediaUrl(logoKey) : null,
-    shareMessage,
   });
 });
 
@@ -38,34 +27,24 @@ site.put('/', requireUser, async (c) => {
   if (!allowed) return forbidden(c, 'Solo el admin de la inmobiliaria');
   const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
 
-  // brandName y shareMessage se pueden guardar por separado (dos formularios distintos
-  // en Configuración). Se arma el upsert con las columnas que llegaron.
-  const cols: string[] = [];
-  const vals: unknown[] = [];
-  if ('brandName' in body) {
-    const brandName = str(body.brandName, 60);
-    if (!brandName) return bad(c, 'Nombre vacío');
-    cols.push('brand_name'); vals.push(brandName);
-  }
-  if ('shareMessage' in body) {
-    cols.push('share_message'); vals.push(str(body.shareMessage, 1000) || null);
-  }
-  if (!cols.length) return bad(c, 'Nada para actualizar');
+  const brandName = str(body.brandName, 60);
+  if (!('brandName' in body)) return bad(c, 'Nada para actualizar');
+  if (!brandName) return bad(c, 'Nombre vacío');
 
   await c.env.DB
     .prepare(
-      `INSERT INTO site_settings (id, ${cols.join(', ')}, updated_at)
-       VALUES (1, ${cols.map(() => '?').join(', ')}, datetime('now'))
-       ON CONFLICT(id) DO UPDATE SET ${cols.map((col) => `${col} = excluded.${col}`).join(', ')}, updated_at = datetime('now')`,
+      `INSERT INTO site_settings (id, brand_name, updated_at)
+       VALUES (1, ?, datetime('now'))
+       ON CONFLICT(id) DO UPDATE SET brand_name = excluded.brand_name, updated_at = datetime('now')`,
     )
-    .bind(...vals)
+    .bind(brandName)
     .run();
-  if ('brandName' in body) invalidateBrand(); // el SSR cachea la marca en memoria
+  invalidateBrand(); // el SSR cachea la marca en memoria
 
   const s = await c.env.DB
-    .prepare('SELECT brand_name, share_message FROM site_settings WHERE id = 1')
-    .first<{ brand_name: string | null; share_message: string | null }>();
-  return c.json({ brandName: s?.brand_name ?? '', shareMessage: s?.share_message ?? '' });
+    .prepare('SELECT brand_name FROM site_settings WHERE id = 1')
+    .first<{ brand_name: string | null }>();
+  return c.json({ brandName: s?.brand_name ?? '' });
 });
 
 // ── Testimonios (prueba social del landing) ───────────────────────────────────

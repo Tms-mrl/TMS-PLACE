@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Aplica TODAS las migraciones de db/migrations/ a la D1 (local o remota).
-// Tolerante a "already exists" / "duplicate column" para poder correrlo N veces.
+// Tolerante a "already exists" / "duplicate column" / "no such column" para poder
+// correrlo N veces (las migraciones son aditivas o DROP COLUMN idempotentes).
 //
 //   pnpm db:migrate:local                        (default, coopen-places-db)
 //   pnpm db:migrate:remote                       (⚠️ contra la D1 real — confirmar antes)
@@ -42,7 +43,7 @@ for (const file of files) {
   if (res.status === 0) {
     applied++;
     process.stdout.write('✓ aplicada\n');
-  } else if (/already exists|duplicate column name/i.test(out)) {
+  } else if (/already exists|duplicate column name|no such column/i.test(out)) {
     skipped++;
     process.stdout.write('— ya aplicada (skip)\n');
   } else {

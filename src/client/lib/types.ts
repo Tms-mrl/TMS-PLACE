@@ -62,8 +62,8 @@ export type Property = {
   branch_id: number | null;
   branch_name: string | null;
   bookings: string | null;
-  /** 1 si la propiedad tiene alguna tarifa en "Precios por temporada". Lo trae /mine. */
-  has_season_prices?: number;
+  /** Tarifas por temporada (JSON de SeasonPrice[]), lo trae /mine. '[]' si no hay ninguna. */
+  season_prices?: string | null;
   created_at?: string | null;
   /** Lo trae /mine — es el "Últ. modificación" de la fila del Inventario. */
   updated_at?: string | null;

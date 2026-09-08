@@ -6,6 +6,7 @@ import {
 import { api } from '../lib/api';
 import { cn } from '../lib/cn';
 import { mediaUrl, PROPERTY_KINDS, STATUSES, type Branch, type Media, type Property } from '../lib/types';
+import { quoteForRange } from '../lib/season-price';
 import { toast } from '../lib/toast';
 import { prefetchClients } from '../lib/clients-cache';
 import { CalendarModal } from './calendar-modal';
@@ -171,8 +172,6 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
   const set = (k: keyof typeof EMPTY_F, v: string) => setF((s) => ({ ...s, [k]: v }));
   const [page, setPage] = useState(0);
   const [capped, setCapped] = useState(false);
-  // Texto que la inmobiliaria escribió en Configuración: precede al/los link(s) al compartir.
-  const [shareMessage, setShareMessage] = useState('');
 
   const load = () => api<{ properties: Property[]; capped?: boolean }>('/api/properties/mine')
     .then((r) => { setProps(r.properties); setCapped(!!r.capped); })
@@ -180,7 +179,6 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
   useEffect(() => {
     load();
     prefetchClients();
-    api<{ shareMessage?: string }>('/api/site').then((r) => setShareMessage(r.shareMessage || '')).catch(() => {});
   }, []);
   useEffect(() => {
     if (!preset) return;
@@ -198,19 +196,30 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
     await Promise.all([...selected].map((id) => api(`/api/properties/${id}`, { method: 'DELETE' }).catch(() => {})));
     setSelected(new Set()); reload();
   }
-  // Compartir varios avisos en un solo mensaje de WhatsApp: el texto de Configuración una
-  // vez y después un link por bloque (WhatsApp arma una preview por URL). No muta nada, así
-  // que no limpia la selección.
-  async function bulkShare() {
-    const chosen = props.filter((p) => selected.has(p.id));
-    const withUrl = chosen.filter((p) => p.external_url);
-    if (!withUrl.length) { toast('Ninguna de las seleccionadas tiene link cargado', 'err'); return; }
-    if (withUrl.length > 15 && !(await confirm(`Vas a compartir ${withUrl.length} links en un mensaje. WhatsApp puede recortar los mensajes largos. ¿Seguir?`))) return;
-    const skipped = chosen.length - withUrl.length;
+  // Compartir por WhatsApp: un bloque por propiedad separado por un renglón en blanco —
+  //   <título>, <dirección>, <ciudad>
+  //   <link del aviso>
+  //   <precio>            ← calculado desde "Precios por temporada" según el rango del filtro
+  // El precio se omite si no hay filtro de fechas o la propiedad no tiene esa tarifa.
+  // No muta nada, así que no limpia la selección.
+  async function shareProps(list: Property[]) {
+    const withUrl = list.filter((p) => p.external_url);
+    if (!withUrl.length) { toast('Ninguna de esas propiedades tiene el link del aviso cargado', 'err'); return; }
+    if (withUrl.length > 15 && !(await confirm(`Vas a compartir ${withUrl.length} avisos en un mensaje. WhatsApp puede recortar los mensajes largos. ¿Seguir?`))) return;
+    const skipped = list.length - withUrl.length;
     if (skipped) toast(`${skipped} sin link: no se ${skipped === 1 ? 'incluyó' : 'incluyeron'}`, 'ok');
-    const text = [shareMessage.trim(), ...withUrl.map((p) => p.external_url as string)].filter(Boolean).join('\n\n');
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+    const dFrom = f.dateFrom || f.dateTo;
+    const dTo = f.dateTo || f.dateFrom;
+    const blocks = withUrl.map((p) => {
+      const where = [p.address, p.city].filter(Boolean).join(', ');
+      const lines = [[p.title, where].filter(Boolean).join(', '), p.external_url as string];
+      const price = dFrom ? quoteForRange(p.season_prices, dFrom, dTo) : null;
+      if (price != null) lines.push(`$${Math.round(price).toLocaleString('es-AR')}`);
+      return lines.join('\n');
+    });
+    window.open(`https://wa.me/?text=${encodeURIComponent(blocks.join('\n\n'))}`, '_blank', 'noopener');
   }
+  const bulkShare = () => shareProps(props.filter((p) => selected.has(p.id)));
 
   async function openLightbox(p: Property) {
     try {
@@ -230,7 +239,7 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
     if (f.kind && (p.kind || '') !== f.kind) return false;
     if (f.priced) {
       // "Tiene precio" = precio fijo cargado O alguna tarifa en "Precios por temporada".
-      const hasPrice = p.price != null || !!p.has_season_prices;
+      const hasPrice = p.price != null || (!!p.season_prices && p.season_prices !== '[]');
       if (f.priced === 'yes' && !hasPrice) return false;
       if (f.priced === 'no' && hasPrice) return false;
     }
@@ -468,11 +477,11 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
       ) : (
         <div className="plist">
           {pageRows.map((p, i) => (
-            <PropertyRow key={p.id} p={p} index={i} expanded={expanded === p.id} shareMessage={shareMessage}
+            <PropertyRow key={p.id} p={p} index={i} expanded={expanded === p.id}
               checked={selected.has(p.id)} selectMode={selected.size > 0} selectedCount={selected.size} onSelect={() => toggleSel(p.id)}
               onToggle={() => setExpanded((e) => (e === p.id ? null : p.id))}
               onManage={() => setManaging(p)} onEdit={() => setEditing(p)} onCalendar={() => setCal(p)}
-              onSeasonPrices={() => setSeasonP(p)} onShareAll={bulkShare}
+              onSeasonPrices={() => setSeasonP(p)} onShare={() => shareProps([p])} onShareAll={bulkShare}
               onLightbox={openLightbox} onStats={() => setStats(p)} onReload={reload} />
           ))}
         </div>
