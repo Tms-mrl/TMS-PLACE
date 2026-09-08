@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { cn } from '../lib/cn';
-import { mediaUrl, STATUSES, type Branch, type Media, type Property } from '../lib/types';
+import { mediaUrl, PROPERTY_KINDS, STATUSES, type Branch, type Media, type Property } from '../lib/types';
 import { toast } from '../lib/toast';
 import { prefetchClients } from '../lib/clients-cache';
 import { CalendarModal } from './calendar-modal';
@@ -152,7 +152,7 @@ function Lightbox({ media, onClose }: { media: Media[]; onClose: () => void }) {
   );
 }
 
-const EMPTY_F = { text: '', op: '', status: '', branch: '', priceMax: '', currency: 'ARS', capacity: '', dateFrom: '', dateTo: '', published: '', archived: false };
+const EMPTY_F = { text: '', op: '', status: '', branch: '', kind: '', priced: '', priceMax: '', currency: 'ARS', capacity: '', dateFrom: '', dateTo: '', published: '', archived: false };
 
 export function PropertiesPanel({ branches, onChanged, preset }: { branches: Branch[]; onChanged?: () => void; preset?: PropPreset }) {
   const confirm = useConfirm();
@@ -227,6 +227,13 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
     if (f.op && p.operation !== f.op) return false;
     if (f.status && p.status !== f.status) return false;
     if (f.branch && String(p.branch_id) !== f.branch) return false;
+    if (f.kind && (p.kind || '') !== f.kind) return false;
+    if (f.priced) {
+      // "Tiene precio" = precio fijo cargado O alguna tarifa en "Precios por temporada".
+      const hasPrice = p.price != null || !!p.has_season_prices;
+      if (f.priced === 'yes' && !hasPrice) return false;
+      if (f.priced === 'no' && hasPrice) return false;
+    }
     if (f.published === 'yes' && !p.published) return false;
     if (f.published === 'no' && p.published) return false;
     if (f.priceMax && p.price != null) {
@@ -294,7 +301,7 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
   // Un cambio de filtro puede dejarte parado en una página que ya no existe.
   const pages = Math.max(1, Math.ceil(displayRows.length / PAGE_SIZE));
   const safePage = Math.min(page, pages - 1);
-  useEffect(() => { setPage(0); }, [f.text, f.op, f.status, f.branch, f.priceMax, f.currency, f.capacity, f.dateFrom, f.dateTo, f.published, f.archived, sort]);
+  useEffect(() => { setPage(0); }, [f.text, f.op, f.status, f.branch, f.kind, f.priced, f.priceMax, f.currency, f.capacity, f.dateFrom, f.dateTo, f.published, f.archived, sort]);
   const pageRows = displayRows.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
   const allSel = pageRows.length > 0 && pageRows.every((p) => selected.has(p.id));
   const toggleAll = () => setSelected(allSel ? new Set() : new Set(pageRows.map((p) => p.id)));
@@ -378,6 +385,21 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
             {branches.map((b) => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
           </SelectContent>
         </Select>
+        <Select value={f.kind || ALL} onValueChange={(v) => set('kind', v === ALL ? '' : v)}>
+          <SelectTrigger className="w-auto min-w-[130px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>Tipo</SelectItem>
+            {PROPERTY_KINDS.map((k) => <SelectItem key={k.v} value={k.v}>{k.label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={f.priced || ALL} onValueChange={(v) => set('priced', v === ALL ? '' : v)}>
+          <SelectTrigger className="w-auto min-w-[130px]" title="Precio fijo o tarifa por temporada cargada"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>Precio</SelectItem>
+            <SelectItem value="yes">Con precio</SelectItem>
+            <SelectItem value="no">Sin precio</SelectItem>
+          </SelectContent>
+        </Select>
         <Select value={f.currency} onValueChange={(v) => set('currency', v)}>
           <SelectTrigger className="w-auto min-w-[100px]" title="Moneda del precio máx"><SelectValue /></SelectTrigger>
           <SelectContent>
@@ -386,8 +408,8 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
             <SelectItem value="all">Ambas</SelectItem>
           </SelectContent>
         </Select>
-        <input type="number" placeholder="Precio máx" value={f.priceMax} onChange={(e) => set('priceMax', e.target.value)} style={{ maxWidth: 120 }} />
-        <input type="number" min={1} placeholder="Personas" title="Ordena por capacidad: primero las de esa cantidad y las más grandes. No oculta ninguna." value={f.capacity} onChange={(e) => set('capacity', e.target.value)} style={{ maxWidth: 120 }} />
+        <input type="number" placeholder="$ máx" title="Precio máximo" value={f.priceMax} onChange={(e) => set('priceMax', e.target.value)} style={{ maxWidth: 96 }} />
+        <input type="number" min={1} placeholder="Pers." title="Ordena por capacidad: primero las de esa cantidad y las más grandes. No oculta ninguna." value={f.capacity} onChange={(e) => set('capacity', e.target.value)} style={{ maxWidth: 74 }} />
         <DateRangePicker from={f.dateFrom} to={f.dateTo} onChange={(dateFrom, dateTo) => setF((s) => ({ ...s, dateFrom, dateTo }))} />
       </div>
       <div className={selected.size > 0 ? 'bulk-bar-wrap open' : 'bulk-bar-wrap'}>
