@@ -292,6 +292,81 @@ retomarlo.
   mensaje precargado, abre el chat directo). Se oculta si la consulta no
   tiene `phone` (ej. viene de un `source` sin teléfono).
 
+## Apartado "Correo": bandeja de equipo sobre una casilla de Gmail (2026-09-10)
+
+Se va a trabajar en un chat aparte — esto queda autocontenido.
+
+**Contexto de la app:** Cloudflare Worker (Hono) + D1 (SQLite) + R2 + SPA React,
+un deploy por cliente (hoy El Muelle, `elmuelle.tomyredrebell.workers.dev`, repo
+`Tms-mrl/TMS-PLACE`, local `C:\dev\tms-place`). Login con Google OAuth propio
+(`src/worker/routes/auth.ts`). El panel de gestión tiene tabs
+(`agency-workspace.tsx`): Resumen / Propiedades / Mapa / Clientes / Operaciones /
+Contratos / Finanzas / Consultas / Sucursales / Equipo / Configuración.
+
+**Lo que se quiere:** un apartado nuevo "Correo" en esa nav. El Muelle recibe las
+consultas en **una sola casilla** (`elmuelle@gmail.com`, Gmail común, NO Workspace).
+Flujo pedido:
+1. Llega una consulta a esa casilla → aparece en el apartado "Correo" del panel.
+2. Quien tría la marca como *pendiente para tal sucursal* (asignar `branch_id` +
+   estado). La app ya sabe qué usuario es de qué sucursal (`agency_members.branch_id`).
+3. Al usuario de esa sucursal le aparece la notificación / un badge de pendientes.
+4. Ese usuario abre el hilo, escribe una respuesta y **abajo adjunta una o varias
+   propiedades** con el mismo bloque que el "Compartir por WhatsApp" del Inventario
+   (`🏡título - 📍dirección / link / precio-según-fechas`, ver `shareProps` en
+   `properties-panel.tsx` y `quoteForRange` en `src/client/lib/season-price.ts`).
+5. La respuesta sale de `elmuelle@gmail.com` y threadea bien.
+
+**Enfoque recomendado (evaluado en el chat de la idea):**
+- **API de Gmail + OAuth**, una sola cuenta conectada **una vez** por un admin
+  (no cada usuario conecta su Gmail). Se guarda el *refresh token* cifrado (con un
+  secret del Worker) y todos leen/responden a través de esa conexión.
+- **Recibir:** cron cada 1 min (Cloudflare Cron Trigger, mínimo 1/min — latencia
+  ok para consultas), sync incremental por `historyId` de Gmail, metadata + snippet
+  a D1, adjuntos entrantes a R2 on-demand al abrir el hilo. (Gmail push vía Pub/Sub
+  existe si algún día se quiere instantáneo, es más infra.)
+- **Responder:** `messages.send` de Gmail con headers de hilo (`In-Reply-To` /
+  `References` / `threadId`) → sale como `elmuelle@gmail.com`, queda en Enviados,
+  no cae en spam, cero configuración de DNS.
+- **Asignar + estados:** tabla nueva (ej. `mail_threads` con `gmail_thread_id`,
+  `from_addr`, `subject`, `snippet`, `received_at`, `branch_id`, `status`,
+  `assigned_at`) + PATCH. Estados tipo `nuevo` / `pendiente` / `respondido` /
+  `archivado`. El "badge para el de la sucursal" = contador en la nav filtrado por
+  el `branch_id` del usuario.
+- **Adjuntar propiedades:** reusar el selector del Inventario + el armador de bloque
+  de `shareProps` (texto plano casi gratis; una versión HTML con foto de portada es
+  un poco más pero chica).
+
+**Verificación de Google (importante, no bloqueante):** los scopes
+`gmail.readonly` + `gmail.send`/`gmail.modify` son "restringidos". Publicada con
+muchos usuarios, Google pide una auditoría de seguridad cara. **Como es una sola
+cuenta**, se deja la OAuth app en modo **"Testing"** con `elmuelle@gmail.com` como
+test user (tope 100) y funciona indefinidamente sin auditoría. Ese es el camino.
+Alternativa que saca a Google del medio: "Contraseña de aplicación" de Gmail (con
+2FA) + IMAP/SMTP — evita la verificación pero IMAP desde un Worker es más frágil
+(no hay sockets persistentes cómodos); se prefiere la API en modo Testing.
+
+**Fácil vs. con truco:**
+- *Fácil / territorio conocido:* el apartado en la nav, la lista de hilos, el
+  detalle, asignar + estados + badge, el composer, adjuntar propiedades, guardar
+  en D1.
+- *Donde está el laburo real:* OAuth de Gmail + pantalla de consentimiento en
+  Google Cloud; sync incremental bien hecho (rate limits, `historyId` vencido →
+  re-scan); cifrado del token; concurrencia (dos personas en el mismo hilo → se
+  resuelve mostrando estado / "lo está viendo Fulano", sin bloquear); adjuntos
+  entrantes.
+
+**Tamaño estimado:** MVP usable (conectar casilla · lista · asignar + estado ·
+badge de pendientes · abrir hilo · responder con propiedades · threading correcto)
+≈ **1,5 a 3 semanas**. Mitad plumbing de Gmail, mitad UI + CRUD de asignación.
+Notificaciones "de verdad" (push del navegador, o aviso por mail/WhatsApp al de la
+sucursal) es una capa extra encima, chica pero fuera del MVP.
+
+**Prerrequisitos de config (una vez):** proyecto de Google Cloud con Gmail API
+habilitada, OAuth consent screen configurada, `elmuelle@gmail.com` como test user,
+y alguien con acceso a esa casilla hace el consentimiento la primera vez. Sumar el
+`redirect_uri` nuevo (mismo tema que ya documentado en CLAUDE.md para el OAuth de
+login). El `GOOGLE_CLIENT_ID`/`_SECRET` puede ser el mismo del login o uno aparte.
+
 ---
 
 Conviene trabajar de a un apartado por vez, en orden o por prioridad — no
