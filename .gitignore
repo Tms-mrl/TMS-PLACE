@@ -12,3 +12,7 @@ dist/
 # listings.json y el HTML cacheado son regenerables con `scrape`; el .sql final que
 # sí se versiona vive en db/seed/elmuelle-import.sql.
 scripts/.import-elmuelle/
+
+# Token de la CLI de wrangler (CLOUDFLARE_API_TOKEN) para deployar sin login interactivo.
+# Vence 2026-09-30 — borrar el archivo en esa fecha (o antes, revocado desde el dashboard).
+.cf-deploy-token
