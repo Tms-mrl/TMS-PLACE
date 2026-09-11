@@ -241,7 +241,14 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
       }
       return lines.join('\n');
     });
-    window.open(`https://wa.me/?text=${encodeURIComponent(blocks.join('\n\n'))}`, '_blank', 'noopener');
+    const waUrl = `https://wa.me/?text=${encodeURIComponent(blocks.join('\n\n'))}`;
+    // En el celu, wa.me redirige ("deep-linkea") a la app de WhatsApp — con _blank eso
+    // deja una pestaña de más atrás en el navegador (a veces se ve un about:blank pelado
+    // mientras arranca), así que ahí navegamos en la misma pestaña. En escritorio no hay
+    // deep link, así que seguimos abriendo aparte para no perder el estado del Inventario
+    // (selección, filtros, página) al volver.
+    if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) window.location.href = waUrl;
+    else window.open(waUrl, '_blank', 'noopener');
   }
   const bulkShare = () => shareProps(props.filter((p) => selected.has(p.id)));
 

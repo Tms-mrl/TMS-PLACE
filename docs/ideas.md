@@ -367,6 +367,17 @@ y alguien con acceso a esa casilla hace el consentimiento la primera vez. Sumar 
 `redirect_uri` nuevo (mismo tema que ya documentado en CLAUDE.md para el OAuth de
 login). El `GOOGLE_CLIENT_ID`/`_SECRET` puede ser el mismo del login o uno aparte.
 
+## Posible eliminación de la barra de "completitud del aviso" (2026-09-11)
+
+Tomy lo está pensando, no decidido todavía. Es la barrita marrón/verde debajo
+del título en cada fila del Inventario (`prow-bar` en `property-row.tsx`,
+calculada por `completeness()` en `src/client/lib/completeness.ts`): mide 8
+ítems del aviso (fotos, precio, ciudad, dirección, ubicación en el mapa,
+descripción, ambientes/baños/superficie, comodidades) y el tooltip dice qué
+falta. Si se decide sacarla, tocar esos dos archivos (la barra en el JSX de
+`property-row.tsx` y, si no queda usada en ningún otro lado, borrar
+`completeness.ts` entero — confirmar antes con un grep de `completeness`).
+
 ---
 
 Conviene trabajar de a un apartado por vez, en orden o por prioridad — no
