@@ -6,7 +6,7 @@ import {
 import { api } from '../lib/api';
 import { cn } from '../lib/cn';
 import { mediaUrl, PROPERTY_KINDS, STATUSES, type Branch, type Media, type Property } from '../lib/types';
-import { quoteForRange } from '../lib/season-price';
+import { quoteForRange, rangeNights } from '../lib/season-price';
 import { toast } from '../lib/toast';
 import { prefetchClients } from '../lib/clients-cache';
 import { CalendarModal } from './calendar-modal';
@@ -153,7 +153,7 @@ function Lightbox({ media, onClose }: { media: Media[]; onClose: () => void }) {
   );
 }
 
-const EMPTY_F = { text: '', op: '', status: '', branch: '', kind: '', priced: '', priceMax: '', currency: 'ARS', capacity: '', dateFrom: '', dateTo: '', published: '', archived: false };
+const EMPTY_F = { text: '', op: '', status: '', branch: '', kind: '', priced: '', capacity: '', dateFrom: '', dateTo: '', published: '', archived: false };
 
 export function PropertiesPanel({ branches, onChanged, preset }: { branches: Branch[]; onChanged?: () => void; preset?: PropPreset }) {
   const confirm = useConfirm();
@@ -186,6 +186,21 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
   }, [preset]);
   const reload = () => { load(); onChanged?.(); };
 
+  // Rango de fechas activo (mismo criterio que el DateRangePicker: un solo día clickeado
+  // cuenta como "desde y hasta" ese día). Lo usa el filtro de reservas solapadas, el
+  // mensaje de "Compartir" y el orden por precio (para cotizar según la tarifa del rango
+  // en vez del precio fijo).
+  const dFrom = f.dateFrom || f.dateTo;
+  const dTo = f.dateTo || f.dateFrom;
+  const dateActive = !!dFrom;
+  /** Precio a usar para ordenar: con fechas activas, la tarifa cotizada para ese rango
+   *  (semana/quincena/día según `quoteForRange`); si la propiedad no tiene esa tarifa
+   *  cargada, o no hay fechas, cae al precio fijo. */
+  const sortPrice = (p: Property): number => {
+    const q = dateActive ? quoteForRange(p.season_prices, dFrom, dTo) : null;
+    return q ?? p.price ?? -Infinity;
+  };
+
   function toggleSel(id: number) { setSelected((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; }); }
   async function bulkPatch(body: Record<string, unknown>) {
     await Promise.all([...selected].map((id) => api(`/api/properties/${id}`, { method: 'PATCH', body: JSON.stringify(body) }).catch(() => {})));
@@ -200,8 +215,8 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
   //   🏡<nombre> - 📍<dirección, ciudad>   (el título de la cartera ya trae "- dir, ciudad";
   //                                          si no, se le suma acá antes de partirlo)
   //   <link del aviso>
-  //   <precio>            ← calculado desde "Precios por temporada" según el rango del filtro
-  // El precio se omite si no hay filtro de fechas o la propiedad no tiene esa tarifa.
+  //   <N días x $precio>  ← calculado desde "Precios por temporada" según el rango del filtro
+  // La línea de precio se omite si no hay filtro de fechas o la propiedad no tiene esa tarifa.
   // No muta nada, así que no limpia la selección.
   async function shareProps(list: Property[]) {
     const withUrl = list.filter((p) => p.external_url);
@@ -209,8 +224,6 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
     if (withUrl.length > 15 && !(await confirm(`Vas a compartir ${withUrl.length} avisos en un mensaje. WhatsApp puede recortar los mensajes largos. ¿Seguir?`))) return;
     const skipped = list.length - withUrl.length;
     if (skipped) toast(`${skipped} sin link: no se ${skipped === 1 ? 'incluyó' : 'incluyeron'}`, 'ok');
-    const dFrom = f.dateFrom || f.dateTo;
-    const dTo = f.dateTo || f.dateFrom;
     const blocks = withUrl.map((p) => {
       const where = [p.address, p.city].filter(Boolean).join(', ');
       // Base = título (que ya suele traer "- dirección, ciudad" por la 0022); si es una
@@ -221,7 +234,11 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
       const l1 = cut === -1 ? `🏡${base}` : `🏡${base.slice(0, cut)} - 📍${base.slice(cut + 3)}`;
       const lines = [l1, p.external_url as string];
       const price = dFrom ? quoteForRange(p.season_prices, dFrom, dTo) : null;
-      if (price != null) lines.push(`$${Math.round(price).toLocaleString('es-AR')}`);
+      if (price != null) {
+        const n = rangeNights(dFrom, dTo);
+        const days = n ? `${n} día${n === 1 ? '' : 's'} x ` : '';
+        lines.push(`${days}$${Math.round(price).toLocaleString('es-AR')}`);
+      }
       return lines.join('\n');
     });
     window.open(`https://wa.me/?text=${encodeURIComponent(blocks.join('\n\n'))}`, '_blank', 'noopener');
@@ -252,22 +269,15 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
     }
     if (f.published === 'yes' && !p.published) return false;
     if (f.published === 'no' && p.published) return false;
-    if (f.priceMax && p.price != null) {
-      // El precio máx se scopea a la moneda elegida (salvo 'all'): 100.000 ARS no matchea 50.000 USD.
-      if (f.currency !== 'all' && p.currency !== f.currency) return false;
-      if (p.price > Number(f.priceMax)) return false;
-    }
     // "Personas" ya no filtra: reordena (ver `sorted`). Pedir N personas trae todo, con
     // las de N y las más grandes arriba (a pedido de Tomy, 2026-09-07 — revierte la
     // "capacidad exacta" de Charly del 2026-08-07).
-    if (f.dateFrom || f.dateTo) {
+    if (dateActive) {
       // Solo excluye si hay una reserva que se solape. "Disponible desde/hasta" es la
       // temporada habitual del anuncio, no un bloqueo de fechas: si no hay una reserva
       // puntual en el medio, la propiedad SÍ está libre para el rango (decisión de
       // producto, 2026-08-20 — antes también filtraba por esa ventana).
-      const from = f.dateFrom || f.dateTo;
-      const to = f.dateTo || f.dateFrom;
-      if (bookedInRange(p.bookings, from, to)) return false;
+      if (bookedInRange(p.bookings, dFrom, dTo)) return false;
     }
     return true;
   });
@@ -282,7 +292,7 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
     cap == null ? [2, 0] : cap >= capN ? [0, cap - capN] : [1, capN - cap];
   const sorted = sort ? [...filtered].sort((a, b) => {
     const k = sort.key as keyof Property;
-    if (k === 'price') return ((a.price ?? -Infinity) - (b.price ?? -Infinity)) * sort.dir;
+    if (k === 'price') return (sortPrice(a) - sortPrice(b)) * sort.dir;
     const av = String(a[k] ?? '').toLowerCase(); const bv = String(b[k] ?? '').toLowerCase();
     return av < bv ? -sort.dir : av > bv ? sort.dir : 0;
   }) : (f.capacity && capN > 0) ? [...filtered].sort((a, b) => {
@@ -294,7 +304,6 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
   // global de hoy: una casa con una reserva en otro mes está libre en las fechas buscadas
   // y mostrarla como "Reservada" confunde. Y como el filtro de arriba ya sacó del listado
   // a toda la que tenga una reserva solapada, lo que queda ES lo disponible en el rango.
-  const dateActive = !!(f.dateFrom || f.dateTo);
   const displayRows = dateActive
     ? sorted.map((p) => (p.status === 'vendida' || p.status === 'disponible' ? p : { ...p, status: 'disponible' }))
     : sorted;
@@ -317,7 +326,7 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
   // Un cambio de filtro puede dejarte parado en una página que ya no existe.
   const pages = Math.max(1, Math.ceil(displayRows.length / PAGE_SIZE));
   const safePage = Math.min(page, pages - 1);
-  useEffect(() => { setPage(0); }, [f.text, f.op, f.status, f.branch, f.kind, f.priced, f.priceMax, f.currency, f.capacity, f.dateFrom, f.dateTo, f.published, f.archived, sort]);
+  useEffect(() => { setPage(0); }, [f.text, f.op, f.status, f.branch, f.kind, f.priced, f.capacity, f.dateFrom, f.dateTo, f.published, f.archived, sort]);
   const pageRows = displayRows.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
   const allSel = pageRows.length > 0 && pageRows.every((p) => selected.has(p.id));
   const toggleAll = () => setSelected(allSel ? new Set() : new Set(pageRows.map((p) => p.id)));
@@ -416,15 +425,6 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
             <SelectItem value="no">Sin precio</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={f.currency} onValueChange={(v) => set('currency', v)}>
-          <SelectTrigger className="w-auto min-w-[100px]" title="Moneda del precio máx"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ARS">$ ARS</SelectItem>
-            <SelectItem value="USD">US$</SelectItem>
-            <SelectItem value="all">Ambas</SelectItem>
-          </SelectContent>
-        </Select>
-        <input type="number" placeholder="$ máx" title="Precio máximo" value={f.priceMax} onChange={(e) => set('priceMax', e.target.value)} style={{ maxWidth: 96 }} />
         <input type="number" min={1} placeholder="Pers." title="Ordena por capacidad: primero las de esa cantidad y las más grandes. No oculta ninguna." value={f.capacity} onChange={(e) => set('capacity', e.target.value)} style={{ maxWidth: 74 }} />
         <DateRangePicker from={f.dateFrom} to={f.dateTo} onChange={(dateFrom, dateTo) => setF((s) => ({ ...s, dateFrom, dateTo }))} />
       </div>
@@ -463,7 +463,7 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
           value={sort ? `${sort.key}:${sort.dir}` : ALL}
           onValueChange={(v) => { if (v === ALL) { setSort(null); return; } const [k, d] = v.split(':'); setSort({ key: k!, dir: Number(d) as 1 | -1 }); }}
         >
-          <SelectTrigger className="h-9 w-auto min-w-[160px] text-xs"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="h-9 w-auto min-w-[160px] text-xs" title={dateActive ? 'Con Fechas puesto, ordena por la tarifa cotizada para ese rango' : 'Ordena por el precio fijo de la propiedad'}><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL}>Más recientes</SelectItem>
             <SelectItem value="price:1">Precio ↑</SelectItem>
