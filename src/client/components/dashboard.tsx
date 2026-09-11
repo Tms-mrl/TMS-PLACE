@@ -29,7 +29,6 @@ export function Dashboard({ user, brandName, logoUrl, onLogout }: { user: User; 
           {logoUrl ? <img className="brand-logo" src={logoUrl} alt={brandName} /> : brandName}
         </a>
         <div className="who">
-          {user.isSuperAdmin && <a className="chip admin" href="/app/admin">Admin de Coopen</a>}
           <AccountMenu
             user={user}
             onLogout={onLogout}
@@ -48,10 +47,10 @@ export function Dashboard({ user, brandName, logoUrl, onLogout }: { user: User; 
 }
 
 // Home del user sin inmobiliaria: consumidor público (busca/alquila/compra), sin
-// autoservicio de publicación — solo favoritos/alertas guardadas + su cuenta. Las
-// inmobiliarias las da de alta el super-admin (ver AdminConsole); no hay forma de
-// que un login de Google normal termine gestionando propiedades. El view vive en
-// Dashboard para que el menú de cuenta pueda saltar directo a cualquier tab.
+// autoservicio de publicación — solo favoritos/alertas guardadas + su cuenta. No hay
+// alta de inmobiliaria por autoservicio: un login de Google normal que no fue invitado
+// a una agencia (`agency_members`/invite) se queda en este consumer home. El view vive
+// en Dashboard para que el menú de cuenta pueda saltar directo a cualquier tab.
 function NonAgencyHome({ user, view, setView, onLogout }: {
   user: User; view: NonAgencyView; setView: (v: NonAgencyView) => void; onLogout: () => void;
 }) {

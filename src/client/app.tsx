@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { api } from './lib/api';
 import type { Me } from './lib/types';
 import { Dashboard } from './components/dashboard';
-import { AdminConsole } from './components/admin-console';
 
 const DEFAULT_BRAND = 'Coopen Places';
 /** Flag de "ya te mandé al proveedor": corta el loop si el usuario cancela y vuelve. */
@@ -65,8 +64,6 @@ export function App() {
     return <Login brandName={brandName} onLogin={login} />;
   }
   try { sessionStorage.removeItem(LOGIN_SENT); } catch { /* noop */ }
-  const path = typeof window !== 'undefined' ? window.location.pathname : '';
-  if (path.startsWith('/app/admin') && me.user.isSuperAdmin) return <AdminConsole user={me.user} onLogout={logout} />;
   return <Dashboard user={me.user} brandName={brandName} logoUrl={logoUrl} onLogout={logout} />;
 }
 

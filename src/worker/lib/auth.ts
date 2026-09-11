@@ -1,6 +1,5 @@
 import type { Context, Next } from 'hono';
 import type { AppEnv, Env, UserRow } from './types';
-import { forbidden } from './http';
 
 // Tres caminos de sesión, en paralelo y por diseño:
 //   1. Link de acceso de agencia (magic link, `agency_access`) — clientes B2B que no
@@ -201,11 +200,5 @@ export async function requireUser(c: Context<AppEnv>, next: Next) {
   const user = await resolveUser(c.env, c.req.raw);
   if (!user) return c.json({ error: 'No autenticado', code: 'UNAUTHENTICATED' }, 401);
   c.set('user', user);
-  await next();
-}
-
-/** Middleware: además de sesión, exige ser super-admin. */
-export async function requireSuperAdmin(c: Context<AppEnv>, next: Next) {
-  if (!isSuperAdmin(c.env, c.var.user)) return forbidden(c, 'Requiere super-admin');
   await next();
 }

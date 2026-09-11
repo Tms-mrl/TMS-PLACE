@@ -3,20 +3,17 @@ import { ChevronDown, Heart, LogOut, Settings } from 'lucide-react';
 import { api } from '../lib/api';
 import type { Agency, User } from '../lib/types';
 import { toast } from '../lib/toast';
-import { Modal } from './property-form';
 import { Button } from './ui/button';
 import { useConfirm } from './ui/use-confirm';
 
 // Punto de entrada único a Favoritos/Configuración/Salir, para cualquier rol
-// (agencia, propietario/inquilino, admin). onFavorites/onSettings son
-// opcionales: si el caller los pasa, navegan a una sección propia (tab) en
-// vez de mostrar el ítem; si no (ej. AdminConsole, que no tiene tabs),
-// "Configuración" cae a un modal genérico.
+// (agencia, propietario/inquilino). onFavorites es opcional (no todo caller
+// tiene esa sección); onSettings siempre navega a la tab de Configuración del
+// caller.
 export function AccountMenu({ user, onLogout, onFavorites, onSettings }: {
-  user: User; onLogout: () => void; onFavorites?: () => void; onSettings?: () => void;
+  user: User; onLogout: () => void; onFavorites?: () => void; onSettings: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [showSettingsModal, setShowSettingsModal] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -41,7 +38,7 @@ export function AccountMenu({ user, onLogout, onFavorites, onSettings }: {
               <Heart className="h-4 w-4" /> Favoritos
             </button>
           )}
-          <button onClick={() => { setOpen(false); onSettings ? onSettings() : setShowSettingsModal(true); }}>
+          <button onClick={() => { setOpen(false); onSettings(); }}>
             <Settings className="h-4 w-4" /> Configuración
           </button>
           <button onClick={onLogout}>
@@ -49,26 +46,19 @@ export function AccountMenu({ user, onLogout, onFavorites, onSettings }: {
           </button>
         </div>
       )}
-      {showSettingsModal && (
-        <Modal title="Configuración" onClose={() => setShowSettingsModal(false)}>
-          <SettingsPanel user={user} onLogout={onLogout} bare />
-        </Modal>
-      )}
     </div>
   );
 }
 
 // Contenido de Configuración: nombre + WhatsApp editables, email de solo
-// lectura (viene de Google) + cerrar sesión. Se usa tanto embebido como tab
-// (Dashboard/AgencyWorkspace, con su propio <section className="panel">)
-// como dentro del modal genérico de AdminConsole (bare=true, sin el wrapper
-// .panel porque el Modal ya aporta el suyo).
+// lectura (viene de Google) + cerrar sesión. Se usa embebido como tab
+// (Dashboard/AgencyWorkspace, con su propio <section className="panel">).
 //
 // El WhatsApp es contextual: si se pasa `agency` (tab de AgencyWorkspace),
 // edita el WhatsApp público de la inmobiliaria (antes vivía en Consultas);
 // si no, edita el WhatsApp personal del propietario/inquilino particular.
-export function SettingsPanel({ user, onLogout, agency, onAgencySaved, bare }: {
-  user: User; onLogout: () => void; agency?: Agency; onAgencySaved?: () => void; bare?: boolean;
+export function SettingsPanel({ user, onLogout, agency, onAgencySaved }: {
+  user: User; onLogout: () => void; agency?: Agency; onAgencySaved?: () => void;
 }) {
   const [name, setName] = useState(user.name || '');
   const [nameSaved, setNameSaved] = useState(false);
@@ -171,7 +161,6 @@ export function SettingsPanel({ user, onLogout, agency, onAgencySaved, bare }: {
     </div>
   );
 
-  if (bare) return body;
   return <section className="panel"><h2>Configuración</h2>{body}</section>;
 }
 

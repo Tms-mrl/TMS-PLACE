@@ -91,9 +91,9 @@ agencies.get('/inquiries', async (c) => {
   return c.json({ inquiries: res.results });
 });
 
-// No hay autoservicio: las inmobiliarias las da de alta el super-admin desde el
-// Admin de Coopen (POST /api/admin/agencies), que genera el link de acceso del
-// cliente. Ver routes/admin.ts.
+// No hay autoservicio de alta de inmobiliaria — se crea a mano en la base (o con
+// createAgencyWithTrial en lib/subscription.ts) cuando hace falta. El panel "Admin de
+// Coopen" que hacía esto por UI se sacó (2026-09-11): con un solo tenant no servía.
 
 // Alta de sucursal (solo admin/manager de la agencia).
 agencies.post('/branches', async (c) => {

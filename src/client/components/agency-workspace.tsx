@@ -60,8 +60,11 @@ export function AgencyWorkspace({ agency, user, onLogout, tab, setTab }: {
 
   return (
     <div className="ws">
-      <div className="ws-head">
-        <div><h2>{ag.name}</h2><span className="muted">Panel de la inmobiliaria</span></div>
+      {/* Se sacó el título "<nombre> / Panel de la inmobiliaria" a pedido de Tomy
+          (2026-09-11) — con un solo tenant no aporta nada, es obvio de qué panel es.
+          El badge de suscripción queda, alineado a la derecha (antes lo empujaba el
+          título con justify-content: space-between). */}
+      <div className="ws-head" style={{ justifyContent: 'flex-end' }}>
         <SubBadge sub={sub} />
       </div>
       <nav className="tabs">

@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { AppEnv, Env } from './lib/types';
-import { requireSuperAdmin, requireUser } from './lib/auth';
+import { requireUser } from './lib/auth';
 import { num, serverError } from './lib/http';
 import { resolvePropertyWhatsapp, waLink } from './lib/whatsapp';
 import { getBrandName } from './lib/layout';
@@ -15,7 +15,6 @@ import { deals } from './routes/deals';
 import { contracts } from './routes/contracts';
 import { expenses } from './routes/expenses';
 import { favorites, savedSearches } from './routes/tenant';
-import { admin } from './routes/admin';
 import { runSavedSearchAlerts } from './lib/alerts';
 
 // El Worker corre PRIMERO en toda request (run_worker_first=true en wrangler.toml):
@@ -40,8 +39,6 @@ app.route('/api/contracts', contracts);
 app.route('/api/expenses', expenses);
 app.route('/api/favorites', favorites);
 app.route('/api/saved-searches', savedSearches);
-app.use('/api/admin/*', requireSuperAdmin); // además de requireUser (ya aplicado arriba)
-app.route('/api/admin', admin);
 
 app.onError((err, c) => serverError(c, err));
 
