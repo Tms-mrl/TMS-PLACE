@@ -353,18 +353,23 @@ input, select, textarea { color: var(--fg); }
 .movecal-grid { gap: 8px; }
 .movecal-day {
   position: relative; display: flex; align-items: flex-start; justify-content: flex-start;
-  min-height: 58px; padding: 7px; border-radius: 10px; background: var(--bg);
-  border: 1px solid var(--line); font: inherit; color: inherit;
+  min-height: 58px; padding: 6px; border-radius: 10px; background: var(--bg);
+  border: 2px solid var(--line); font: inherit; color: inherit;
 }
 .movecal-day:not(:disabled) { cursor: pointer; }
 .movecal-day:not(:disabled):hover { border-color: var(--accent); }
 .movecal-day:not(:disabled):focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .movecal-num { font-size: 13px; font-weight: 600; }
-/* Mismos tonos pastel que .chip.ok / .chip.blocked, para que el verde/rojo se lea igual
-   en toda la app (no son colores nuevos). */
-.movecal-day.movecal-in { background: #e7f2ea; border-color: #bcdcc7; }
-.movecal-day.movecal-out { background: #f7e6e1; border-color: #e6c3b8; }
-.movecal-day.movecal-both { background: linear-gradient(135deg, #e7f2ea 0%, #e7f2ea 50%, #f7e6e1 50%, #f7e6e1 100%); border-color: #d8c9b9; }
+/* Mismo par verde/rojo que .chip.ok / .chip.blocked pero un poco más saturado (a pedido
+   de Tomy, 2026-09-12): con borde más grueso, el tono pastel original quedaba débil. */
+.movecal-day.movecal-in { background: color-mix(in srgb, var(--ok) 24%, var(--panel)); border-color: color-mix(in srgb, var(--ok) 55%, transparent); }
+.movecal-day.movecal-out { background: color-mix(in srgb, var(--err) 24%, var(--panel)); border-color: color-mix(in srgb, var(--err) 55%, transparent); }
+.movecal-day.movecal-both {
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--ok) 24%, var(--panel)) 0%, color-mix(in srgb, var(--ok) 24%, var(--panel)) 50%,
+    color-mix(in srgb, var(--err) 24%, var(--panel)) 50%, color-mix(in srgb, var(--err) 24%, var(--panel)) 100%);
+  border-color: color-mix(in srgb, var(--fg) 25%, var(--line));
+}
 .movecal-dot { width: 7px; height: 7px; border-radius: 999px; display: inline-block; }
 .movecal-dot-in { background: var(--ok); }
 .movecal-dot-out { background: var(--err); }
