@@ -24,6 +24,18 @@ export type Env = {
   SCRAPER_URL?: string;
   /** Base pública del sitio (para links absolutos en el cron de alertas, que no tiene request). */
   SITE_URL?: string;
+  /**
+   * OAuth Client ID de Gmail (proyecto de Google Cloud dedicado, separado del login).
+   * No es secreto. Ver docs/ideas.md "Apartado Correo".
+   */
+  GMAIL_CLIENT_ID?: string;
+  /** Secret: `wrangler secret put GMAIL_CLIENT_SECRET`. */
+  GMAIL_CLIENT_SECRET?: string;
+  /**
+   * Secret: clave AES-GCM (32 bytes, base64) para cifrar el refresh token de Gmail
+   * guardado en `mail_account`. `wrangler secret put MAIL_TOKEN_KEY`.
+   */
+  MAIL_TOKEN_KEY?: string;
 };
 
 export type UserRow = {

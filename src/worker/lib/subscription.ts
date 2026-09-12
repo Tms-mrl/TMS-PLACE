@@ -66,16 +66,16 @@ export async function getSubStatus(db: D1Database, agencyId: number): Promise<Su
 export async function getUserAgency(
   db: D1Database,
   userId: number,
-): Promise<{ agency: AgencyRow; role: string } | null> {
+): Promise<{ agency: AgencyRow; role: string; branchId: number | null } | null> {
   const row = await db
     .prepare(
-      `SELECT a.*, m.role AS member_role
+      `SELECT a.*, m.role AS member_role, m.branch_id AS member_branch_id
        FROM agency_members m JOIN agencies a ON a.id = m.agency_id
        WHERE m.user_id = ? ORDER BY a.id LIMIT 1`,
     )
     .bind(userId)
-    .first<AgencyRow & { member_role: string }>();
+    .first<AgencyRow & { member_role: string; member_branch_id: number | null }>();
   if (!row) return null;
-  const { member_role, ...agency } = row;
-  return { agency: agency as AgencyRow, role: member_role };
+  const { member_role, member_branch_id, ...agency } = row;
+  return { agency: agency as AgencyRow, role: member_role, branchId: member_branch_id };
 }

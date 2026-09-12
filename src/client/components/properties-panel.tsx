@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Calendar as CalendarIcon, ChevronLeft, ChevronRight, Download, EyeOff,
-  Search, Share2, Tag, X,
+  Mail, Search, Share2, Tag, X,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { cn } from '../lib/cn';
 import { mediaUrl, PROPERTY_KINDS, STATUSES, type Branch, type Media, type Property } from '../lib/types';
-import { quoteForRange, rangeNights } from '../lib/season-price';
+import { quoteForRange } from '../lib/season-price';
+import { shareBlocks } from '../lib/share-block';
 import { toast } from '../lib/toast';
 import { prefetchClients } from '../lib/clients-cache';
 import { CalendarModal } from './calendar-modal';
@@ -27,9 +28,12 @@ const ALL = '_all';
 const NONE = '_none';
 
 
-// ¿Hay alguna reserva que se solape con el rango [from, to]? (test de solapamiento de intervalos)
+// ¿Hay alguna reserva que se solape con el rango [from, to)? Medio-abierto: el día de
+// salida (to/t) ya no cuenta como ocupado — el huésped se va a la mañana y otra familia
+// puede entrar esa misma tarde, así que dos rangos que se tocan en un solo día (uno
+// termina donde el otro arranca) NO se consideran solapados.
 function bookedInRange(bookingsJson: string | null, from: string, to: string): boolean {
-  try { return (JSON.parse(bookingsJson || '[]') as { f: string; t: string }[]).some((b) => b.f <= to && from <= b.t); }
+  try { return (JSON.parse(bookingsJson || '[]') as { f: string; t: string }[]).some((b) => b.f < to && from < b.t); }
   catch { return false; }
 }
 
@@ -38,7 +42,7 @@ const fmtShort = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
 
 // Selector de rango de fechas por almanaque clickeable (mismo gesto que el CalendarModal
 // de reservas), para reemplazar el par de <input type=date> del filtro de Inventario.
-function DateRangePicker({ from, to, onChange }: { from: string; to: string; onChange: (from: string, to: string) => void }) {
+export function DateRangePicker({ from, to, onChange }: { from: string; to: string; onChange: (from: string, to: string) => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const now = new Date();
@@ -155,7 +159,13 @@ function Lightbox({ media, onClose }: { media: Media[]; onClose: () => void }) {
 
 const EMPTY_F = { text: '', op: '', status: '', branch: '', kind: '', priced: '', capacity: '', dateFrom: '', dateTo: '', published: '', archived: false };
 
-export function PropertiesPanel({ branches, onChanged, preset }: { branches: Branch[]; onChanged?: () => void; preset?: PropPreset }) {
+export function PropertiesPanel({ branches, onChanged, preset, mailAttach, onSendToMail, onCancelMailAttach }: {
+  branches: Branch[]; onChanged?: () => void; preset?: PropPreset;
+  /** Modo "elegir propiedades para adjuntar a un correo" (ver CorreoPanel → "Adjuntar
+   *  propiedades"): mientras está activo, la barra de selección masiva cambia el botón
+   *  "Compartir por WhatsApp" por "Enviar por correo". */
+  mailAttach?: boolean; onSendToMail?: (props: Property[]) => void; onCancelMailAttach?: () => void;
+}) {
   const confirm = useConfirm();
   const [props, setProps] = useState<Property[]>([]);
   const [managing, setManaging] = useState<Property | null>(null);
@@ -211,11 +221,8 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
     await Promise.all([...selected].map((id) => api(`/api/properties/${id}`, { method: 'DELETE' }).catch(() => {})));
     setSelected(new Set()); reload();
   }
-  // Compartir por WhatsApp: un bloque por propiedad separado por un renglón en blanco —
-  //   🏡<nombre> - 📍<dirección, ciudad>   (el título de la cartera ya trae "- dir, ciudad";
-  //                                          si no, se le suma acá antes de partirlo)
-  //   <link del aviso>
-  //   <N días x $precio>  ← calculado desde "Precios por temporada" según el rango del filtro
+  // Compartir por WhatsApp: un bloque por propiedad separado por un renglón en blanco
+  // (formato armado en lib/share-block.ts, reusado tal cual por el composer de "Correo").
   // La línea de precio se omite si no hay filtro de fechas o la propiedad no tiene esa tarifa.
   // No muta nada, así que no limpia la selección.
   async function shareProps(list: Property[]) {
@@ -224,24 +231,7 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
     if (withUrl.length > 15 && !(await confirm(`Vas a compartir ${withUrl.length} avisos en un mensaje. WhatsApp puede recortar los mensajes largos. ¿Seguir?`))) return;
     const skipped = list.length - withUrl.length;
     if (skipped) toast(`${skipped} sin link: no se ${skipped === 1 ? 'incluyó' : 'incluyeron'}`, 'ok');
-    const blocks = withUrl.map((p) => {
-      const where = [p.address, p.city].filter(Boolean).join(', ');
-      // Base = título (que ya suele traer "- dirección, ciudad" por la 0022); si es una
-      // propiedad nueva sin eso, se lo sumamos. Después partimos en el último " - " para
-      // meter 🏡 antes del nombre y 📍 antes de la ubicación.
-      const base = where && p.address && !p.title.includes(p.address) ? `${p.title} - ${where}` : p.title;
-      const cut = base.lastIndexOf(' - ');
-      const l1 = cut === -1 ? `🏡${base}` : `🏡${base.slice(0, cut)} - 📍${base.slice(cut + 3)}`;
-      const lines = [l1, p.external_url as string];
-      const price = dFrom ? quoteForRange(p.season_prices, dFrom, dTo) : null;
-      if (price != null) {
-        const n = rangeNights(dFrom, dTo);
-        const days = n ? `${n} día${n === 1 ? '' : 's'} x ` : '';
-        lines.push(`${days}$${Math.round(price).toLocaleString('es-AR')}`);
-      }
-      return lines.join('\n');
-    });
-    const waUrl = `https://wa.me/?text=${encodeURIComponent(blocks.join('\n\n'))}`;
+    const waUrl = `https://wa.me/?text=${encodeURIComponent(shareBlocks(withUrl, dFrom, dTo))}`;
     // En el celu, wa.me redirige ("deep-linkea") a la app de WhatsApp — con _blank eso
     // deja una pestaña de más atrás en el navegador (a veces se ve un about:blank pelado
     // mientras arranca), así que ahí navegamos en la misma pestaña. En escritorio no hay
@@ -251,6 +241,18 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
     else window.open(waUrl, '_blank', 'noopener');
   }
   const bulkShare = () => shareProps(props.filter((p) => selected.has(p.id)));
+
+  // "Enviar por correo": misma validación que shareProps (necesita el link del aviso),
+  // pero en vez de abrir WhatsApp le pasa la selección al composer de "Correo" (ver
+  // mailAttach/onSendToMail, prendido desde CorreoPanel → "Adjuntar propiedades").
+  function sendToMail(list: Property[]) {
+    const withUrl = list.filter((p) => p.external_url);
+    if (!withUrl.length) { toast('Ninguna de esas propiedades tiene el link del aviso cargado', 'err'); return; }
+    const skipped = list.length - withUrl.length;
+    if (skipped) toast(`${skipped} sin link: no se ${skipped === 1 ? 'incluyó' : 'incluyeron'}`, 'ok');
+    onSendToMail?.(withUrl);
+  }
+  const bulkSendToMail = () => sendToMail(props.filter((p) => selected.has(p.id)));
 
   async function openLightbox(p: Property) {
     try {
@@ -381,6 +383,14 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
         <p className="pnotice">Tenés más propiedades de las que el panel puede traer de una vez: se cargaron las <b>{props.length}</b> más recientes. Los filtros y la búsqueda trabajan sobre esas.</p>
       )}
 
+      {mailAttach && (
+        <p className="pnotice">
+          Elegí las propiedades para el correo (filtrá/buscá si hace falta) y tocá <b>"Enviar por correo"</b> en
+          la barra de abajo.{' '}
+          <button type="button" className="link-btn" onClick={onCancelMailAttach}>Cancelar</button>
+        </p>
+      )}
+
       <div className="psearch">
         <div className="psearch-field">
           <Search className="psearch-ic" />
@@ -444,7 +454,11 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
                 Seleccionar las {displayRows.length} que coinciden
               </button>
             )}
-            <Button size="sm" variant="secondary" onClick={bulkShare}><Share2 className="h-4 w-4" />Compartir por WhatsApp</Button>
+            {mailAttach ? (
+              <Button size="sm" variant="secondary" onClick={bulkSendToMail}><Mail className="h-4 w-4" />Enviar por correo</Button>
+            ) : (
+              <Button size="sm" variant="secondary" onClick={bulkShare}><Share2 className="h-4 w-4" />Compartir por WhatsApp</Button>
+            )}
             <Button size="sm" variant="secondary" onClick={() => bulkPatch({ published: true })}>Publicar</Button>
             <Button size="sm" variant="outline" onClick={() => bulkPatch({ published: false })}>Despublicar</Button>
             <Button size="sm" variant="outline" onClick={() => bulkPatch({ status: 'vendida' })}>Marcar como vendida</Button>
@@ -492,10 +506,11 @@ export function PropertiesPanel({ branches, onChanged, preset }: { branches: Bra
         <div className="plist">
           {pageRows.map((p, i) => (
             <PropertyRow key={p.id} p={p} index={i} expanded={expanded === p.id}
-              checked={selected.has(p.id)} selectMode={selected.size > 0} selectedCount={selected.size} onSelect={() => toggleSel(p.id)}
+              checked={selected.has(p.id)} selectMode={selected.size > 0} selectedCount={selected.size} mailAttach={!!mailAttach} onSelect={() => toggleSel(p.id)}
               onToggle={() => setExpanded((e) => (e === p.id ? null : p.id))}
               onManage={() => setManaging(p)} onEdit={() => setEditing(p)} onCalendar={() => setCal(p)}
-              onSeasonPrices={() => setSeasonP(p)} onShare={() => shareProps([p])} onShareAll={bulkShare}
+              onSeasonPrices={() => setSeasonP(p)}
+              onShare={() => (mailAttach ? sendToMail([p]) : shareProps([p]))} onShareAll={mailAttach ? bulkSendToMail : bulkShare}
               onLightbox={openLightbox} onStats={() => setStats(p)} onReload={reload} />
           ))}
         </div>

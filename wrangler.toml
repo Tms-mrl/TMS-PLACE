@@ -10,6 +10,10 @@
 #   GOOGLE_CLIENT_SECRET — OAuth de Google (login). Ver GOOGLE_CLIENT_ID en [vars] abajo.
 #   INTERNAL_API_SECRET  — futuro: emails (alertas de búsquedas guardadas).
 #   SCRAPER_URL           — proxy de scraping para el import de Argenprop (opcional).
+#   GMAIL_CLIENT_SECRET   — OAuth de Gmail (apartado "Correo"), CLIENT PROPIO Y SEPARADO
+#                            del login. Ver GMAIL_CLIENT_ID en [vars] abajo.
+#   MAIL_TOKEN_KEY         — clave AES-GCM (32 bytes, base64) que cifra el refresh token
+#                            de Gmail guardado en D1 (tabla mail_account).
 name = "elmuelle"
 main = "src/worker/index.ts"
 account_id = "d9eac09aa903fdf10ee5a521bd0186dc"
@@ -47,8 +51,13 @@ GOOGLE_CLIENT_ID = "932608486382-eirj5s8emld2vfr64pruprtg1po1rprn.apps.googleuse
 SUPER_ADMIN_SUBS = "tomasmoodleiram@gmail.com"
 # Base pública del sitio (para links en emails del cron; no hay request ahí para derivarla).
 SITE_URL = "https://elmuelle.tomyredrebell.workers.dev"
+# OAuth Client ID del apartado "Correo" (proyecto de Google Cloud APARTE del login,
+# con la Gmail API habilitada — ver docs/ideas.md).
+GMAIL_CLIENT_ID = "932608486382-6pumps3o8pnvfaedg3bl0ca61ecdqkpc.apps.googleusercontent.com"
 
-# Cron: alertas de búsquedas guardadas por email (1 vez al día, ~10am ART = 13 UTC).
-# El handler está DORMANTE hasta que se conecte un proveedor de mail (ver lib/alerts.ts).
+# Cron: dos triggers, distinguidos por event.cron en scheduled() (src/worker/index.ts).
+# "0 13 * * *"  → alertas de búsquedas guardadas por email (dormante hasta que se
+#                 conecte un proveedor de mail, ver lib/alerts.ts).
+# "* * * * *"   → sync de Correo (Gmail), 1/min = piso de Cloudflare Cron Triggers.
 [triggers]
-crons = ["0 13 * * *"]
+crons = ["0 13 * * *", "* * * * *"]

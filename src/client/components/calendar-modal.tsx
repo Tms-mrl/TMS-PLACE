@@ -150,9 +150,14 @@ export function CalendarModal({ property, onClose }: { property: Property; onClo
     loadClients().then(setClients).catch(() => {});
   }, []);
 
-  const bookingOn = (d: string) => bookings.find((b) => b.from_date <= d && d <= b.to_date);
-  /** ¿El rango pisa alguna reserva ya cargada? (solapamiento de intervalos) */
-  const clashes = (from: string, to: string) => bookings.some((b) => b.from_date <= to && from <= b.to_date);
+  // Medio-abierto [from_date, to_date): el día de salida no cuenta como noche ocupada
+  // (el huésped se va a la mañana, otra familia puede entrar esa misma tarde). Por eso
+  // se separa "noche ocupada" (bloquea, salta a la reserva) de "día de salida nomás"
+  // (queda libre para arrancar una reserva nueva, ver `checkoutOn` más abajo).
+  const bookingOccupying = (d: string) => bookings.find((b) => b.from_date <= d && d < b.to_date);
+  const checkoutOn = (d: string) => bookings.find((b) => b.to_date === d);
+  /** ¿El rango pisa alguna noche ya ocupada? (solapamiento de intervalos medio-abiertos) */
+  const clashes = (from: string, to: string) => bookings.some((b) => b.from_date < to && from < b.to_date);
 
   async function add() {
     if (!f.from || !f.to) return toast('Elegí las fechas desde y hasta', 'err');
@@ -197,8 +202,8 @@ export function CalendarModal({ property, onClose }: { property: Property; onClo
   // Elegir el rango tocando el calendario: el 1er día abre la selección y el 2º la
   // cierra. No importa el orden — la fecha menor es el "desde" y la mayor el "hasta".
   function pickDay(d: string) {
-    const b = bookingOn(d);
-    if (b) { goToBooking(b); return; }   // día ocupado: no se selecciona, muestra de qué reserva es
+    const occ = bookingOccupying(d);
+    if (occ) { goToBooking(occ); return; }   // noche ocupada: no se selecciona, muestra de qué reserva es
     if (sold) return;
     if (!f.from || f.to) { setF((s) => ({ ...s, from: d, to: '' })); return; }
     const from = d < f.from ? d : f.from;
@@ -224,15 +229,24 @@ export function CalendarModal({ property, onClose }: { property: Property; onClo
         {['D', 'L', 'M', 'M', 'J', 'V', 'S'].map((d, i) => <div key={i} className="cal-dow">{d}</div>)}
         {cells.map((d, i) => {
           if (!d) return <div key={i} />;
-          const b = bookingOn(d);
-          const cls = b ? (b.kind === 'alquiler' ? 'cal-day booked' : 'cal-day booked-reserva') : 'cal-day';
+          const occ = bookingOccupying(d);
+          // Día de salida (checkout) de una reserva: solo cuenta como tal si ninguna OTRA
+          // reserva ya ocupa esa noche (si la ocupa, `occ` manda y se pinta sólido como
+          // siempre). Se pinta distinto (rojo) porque a esa altura el día ya está libre.
+          const checkout = !occ ? checkoutOn(d) : undefined;
+          const b = occ || checkout;
+          const cls = occ ? (occ.kind === 'alquiler' ? 'cal-day booked' : 'cal-day booked-reserva') : checkout ? 'cal-day checkout' : 'cal-day';
           const focus = b && b.id === focusId ? ' cal-focus' : '';
-          const inSel = !b && f.from && (f.to ? d >= f.from && d <= f.to : d === f.from);
-          const sel = inSel ? (d === f.from || d === f.to ? ' cal-sel cal-sel-edge' : ' cal-sel') : '';
+          const inSel = !occ && f.from && (f.to ? d >= f.from && d <= f.to : d === f.from);
+          const isEdge = d === f.from || d === f.to;
+          // Si la punta de la selección nueva cae justo en un día de salida ya cargado
+          // (el otro huésped se va y este entra el mismo día), se marca azul en vez del
+          // verde de selección normal — es un "día de entrega", no una selección común.
+          const sel = inSel ? (isEdge && checkout ? ' cal-sel cal-handover' : isEdge ? ' cal-sel cal-sel-edge' : ' cal-sel') : '';
           return (
             <button
               key={i} type="button" className={cls + focus + sel}
-              title={b ? `${KIND_LABEL[b.kind] || b.kind}${b.client_name || b.guest_name ? ` · ${b.client_name || b.guest_name}` : ''}` : undefined}
+              title={b ? `${KIND_LABEL[b.kind] || b.kind}${b.client_name || b.guest_name ? ` · ${b.client_name || b.guest_name}` : ''}${checkout ? ' · sale este día' : ''}` : undefined}
               onClick={() => pickDay(d)}
             >{Number(d.slice(-2))}</button>
           );

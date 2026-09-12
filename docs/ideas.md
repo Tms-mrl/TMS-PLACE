@@ -304,7 +304,7 @@ un deploy por cliente (hoy El Muelle, `elmuelle.tomyredrebell.workers.dev`, repo
 Contratos / Finanzas / Consultas / Sucursales / Equipo / Configuración.
 
 **Lo que se quiere:** un apartado nuevo "Correo" en esa nav. El Muelle recibe las
-consultas en **una sola casilla** (`elmuelle@gmail.com`, Gmail común, NO Workspace).
+consultas en **una sola casilla** (`elmuellepropiedades@gmail.com`, Gmail común, NO Workspace).
 Flujo pedido:
 1. Llega una consulta a esa casilla → aparece en el apartado "Correo" del panel.
 2. Quien tría la marca como *pendiente para tal sucursal* (asignar `branch_id` +
@@ -314,7 +314,7 @@ Flujo pedido:
    propiedades** con el mismo bloque que el "Compartir por WhatsApp" del Inventario
    (`🏡título - 📍dirección / link / precio-según-fechas`, ver `shareProps` en
    `properties-panel.tsx` y `quoteForRange` en `src/client/lib/season-price.ts`).
-5. La respuesta sale de `elmuelle@gmail.com` y threadea bien.
+5. La respuesta sale de `elmuellepropiedades@gmail.com` y threadea bien.
 
 **Enfoque recomendado (evaluado en el chat de la idea):**
 - **API de Gmail + OAuth**, una sola cuenta conectada **una vez** por un admin
@@ -325,7 +325,7 @@ Flujo pedido:
   a D1, adjuntos entrantes a R2 on-demand al abrir el hilo. (Gmail push vía Pub/Sub
   existe si algún día se quiere instantáneo, es más infra.)
 - **Responder:** `messages.send` de Gmail con headers de hilo (`In-Reply-To` /
-  `References` / `threadId`) → sale como `elmuelle@gmail.com`, queda en Enviados,
+  `References` / `threadId`) → sale como `elmuellepropiedades@gmail.com`, queda en Enviados,
   no cae en spam, cero configuración de DNS.
 - **Asignar + estados:** tabla nueva (ej. `mail_threads` con `gmail_thread_id`,
   `from_addr`, `subject`, `snippet`, `received_at`, `branch_id`, `status`,
@@ -339,7 +339,7 @@ Flujo pedido:
 **Verificación de Google (importante, no bloqueante):** los scopes
 `gmail.readonly` + `gmail.send`/`gmail.modify` son "restringidos". Publicada con
 muchos usuarios, Google pide una auditoría de seguridad cara. **Como es una sola
-cuenta**, se deja la OAuth app en modo **"Testing"** con `elmuelle@gmail.com` como
+cuenta**, se deja la OAuth app en modo **"Testing"** con `elmuellepropiedades@gmail.com` como
 test user (tope 100) y funciona indefinidamente sin auditoría. Ese es el camino.
 Alternativa que saca a Google del medio: "Contraseña de aplicación" de Gmail (con
 2FA) + IMAP/SMTP — evita la verificación pero IMAP desde un Worker es más frágil
@@ -362,7 +362,7 @@ Notificaciones "de verdad" (push del navegador, o aviso por mail/WhatsApp al de 
 sucursal) es una capa extra encima, chica pero fuera del MVP.
 
 **Prerrequisitos de config (una vez):** proyecto de Google Cloud con Gmail API
-habilitada, OAuth consent screen configurada, `elmuelle@gmail.com` como test user,
+habilitada, OAuth consent screen configurada, `elmuellepropiedades@gmail.com` como test user,
 y alguien con acceso a esa casilla hace el consentimiento la primera vez. Sumar el
 `redirect_uri` nuevo (mismo tema que ya documentado en CLAUDE.md para el OAuth de
 login). El `GOOGLE_CLIENT_ID`/`_SECRET` puede ser el mismo del login o uno aparte.

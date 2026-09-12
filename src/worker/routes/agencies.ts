@@ -3,6 +3,7 @@ import type { AppEnv } from '../lib/types';
 import { bad, forbidden, num, str } from '../lib/http';
 import { getSubStatus, getUserAgency } from '../lib/subscription';
 import { genToken } from '../lib/auth';
+import { branchInAgency } from '../lib/ownership';
 import { COMPUTED_STATUS_SQL } from '../lib/propertyStatus';
 
 // Gestión de la inmobiliaria (módulo A). v0: 1 agencia por user.
@@ -18,6 +19,24 @@ agencies.get('/mine', async (c) => {
     .bind(mine.agency.id)
     .all();
   return c.json({ agency: mine.agency, role: mine.role, subscription: sub, branches: branches.results });
+});
+
+// Autoservicio: cada usuario elige SU PROPIA sucursal (no hace falta ser admin/manager
+// — a diferencia de PATCH /members/:userId, que es como un admin asigna sucursal a
+// terceros). Cada persona entra con su propia cuenta de Google, así que esto queda
+// guardado por usuario, no por dispositivo/sesión. Pensado para reemplazar el chip de
+// suscripción en el header del panel por un selector rápido de "en qué sucursal estoy".
+agencies.patch('/mine/branch', async (c) => {
+  const mine = await getUserAgency(c.env.DB, c.var.user.id);
+  if (!mine) return bad(c, 'No tenés una inmobiliaria');
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  const branchId = num(body.branch_id);
+  if (!(await branchInAgency(c.env.DB, mine.agency.id, branchId))) return bad(c, 'Sucursal inválida');
+  await c.env.DB
+    .prepare('UPDATE agency_members SET branch_id = ? WHERE agency_id = ? AND user_id = ?')
+    .bind(branchId, mine.agency.id, c.var.user.id)
+    .run();
+  return c.json({ branchId });
 });
 
 // Resumen para el dashboard (KPIs): propiedades por estado/operación/sucursal + clientes.

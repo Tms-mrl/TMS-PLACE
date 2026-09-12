@@ -143,7 +143,7 @@ auth.get('/me', async (c) => {
       roles: {
         owner: !!profile?.is_owner,
         tenant: !!profile?.is_tenant,
-        agency: agency ? { id: agency.agency.id, name: agency.agency.name, role: agency.role } : null,
+        agency: agency ? { id: agency.agency.id, name: agency.agency.name, role: agency.role, branchId: agency.branchId } : null,
       },
       onboarded: !!profile?.onboarded,
     },

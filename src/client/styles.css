@@ -99,6 +99,17 @@ input, select, textarea { font-family: inherit; }
 .chip.blocked { color: #8f2f1e; background: #f7e6e1; border-color: #e6c3b8; }
 .chip.admin { color: #fff; background: var(--forest); text-decoration: none; }
 
+/* Estados de "Correo" (mail_threads.status). Clases propias (no .chip.ok/.chip.blocked
+   de arriba, que se reusan en Equipo/Consultas/Admin) — fondo sólido y saturado a
+   propósito: el pastel del resto de la app quedaba ilegible acá (2026-09-12, feedback
+   del usuario: "casi no se ven"). nuevo=azul, pendiente=amarillo/naranja, respondido=
+   verde, archivado=gris oscuro. */
+.mail-status { display: inline-block; font-size: 12px; font-weight: 700; padding: 3px 11px; border-radius: 999px; color: #fff; }
+.mail-status.st-nuevo { background: #2563eb; }
+.mail-status.st-pendiente { background: #d97706; }
+.mail-status.st-respondido { background: #16a34a; }
+.mail-status.st-archivado { background: #57534e; }
+
 /* Estado calculado de una propiedad (solo lectura, ver SaleActions para Vendida) */
 
 /* Lista de propiedades (cards) */
@@ -294,6 +305,15 @@ input, select, textarea { color: var(--fg); }
 .cal-day.cal-sel-edge { background: color-mix(in srgb, var(--accent) 32%, transparent); font-weight: 700; box-shadow: inset 0 0 0 2px var(--accent); }
 .cal-day.booked { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
 .cal-day.booked-reserva { background: var(--warn); color: #fff; border-color: var(--warn); font-weight: 600; }
+/* Día de salida (checkout) de una reserva ya cargada: se pinta distinto del resto del
+   rango (que sigue sólido en .booked/.booked-reserva) porque a partir de ahí el día
+   queda libre — el huésped se va a la mañana y otra familia puede entrar a la tarde.
+   Por eso también queda clickeable (antes ese día contaba como ocupado). */
+.cal-day.checkout { background: var(--err); color: #fff; border-color: var(--err); font-weight: 600; }
+/* Si esa fecha de salida se elige como punta de una reserva NUEVA (el próximo huésped
+   entra ese mismo día), se marca azul en vez del verde de selección normal — es un
+   "día de entrega", no una selección común. */
+.cal-day.cal-sel.cal-handover { background: #2563eb; color: #fff; border-color: #2563eb; box-shadow: none; }
 /* Elegir contacto: el desplegable deja lugar al alta rápida que va a su derecha. */
 .picker-row { display: flex; gap: 8px; align-items: center; }
 .picker-row .picker-select { flex: 1 1 auto; min-width: 0; }
@@ -325,6 +345,38 @@ input, select, textarea { color: var(--fg); }
 .bk-row.bk-active { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent); }
 /* Días de la reserva enfocada: anillo para ubicarla de un vistazo en la grilla. */
 .cal-day.cal-focus { box-shadow: 0 0 0 2px var(--fg); }
+
+/* Calendario de movimientos (tab "Calendario", agencia): celda propia (.movecal-*),
+   NO basada en .cal-day (esa ya tiene .booked/.booked-reserva de un solo color sólido
+   para todo el rango ocupado — acá una reserva aporta 2 eventos puntuales, ingreso y
+   desocupación, y un día puede necesitar mostrar los dos colores a la vez). */
+.movecal-grid { gap: 8px; }
+.movecal-day {
+  position: relative; display: flex; align-items: flex-start; justify-content: flex-start;
+  min-height: 58px; padding: 7px; border-radius: 10px; background: var(--bg);
+  border: 1px solid var(--line); font: inherit; color: inherit;
+}
+.movecal-day:not(:disabled) { cursor: pointer; }
+.movecal-day:not(:disabled):hover { border-color: var(--accent); }
+.movecal-day:not(:disabled):focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.movecal-num { font-size: 13px; font-weight: 600; }
+/* Mismos tonos pastel que .chip.ok / .chip.blocked, para que el verde/rojo se lea igual
+   en toda la app (no son colores nuevos). */
+.movecal-day.movecal-in { background: #e7f2ea; border-color: #bcdcc7; }
+.movecal-day.movecal-out { background: #f7e6e1; border-color: #e6c3b8; }
+.movecal-day.movecal-both { background: linear-gradient(135deg, #e7f2ea 0%, #e7f2ea 50%, #f7e6e1 50%, #f7e6e1 100%); border-color: #d8c9b9; }
+.movecal-dot { width: 7px; height: 7px; border-radius: 999px; display: inline-block; }
+.movecal-dot-in { background: var(--ok); }
+.movecal-dot-out { background: var(--err); }
+.movecal-legend { display: flex; gap: 18px; margin-top: 12px; font-size: 12px; color: var(--muted); align-items: center; }
+.movecal-section + .movecal-section { margin-top: 16px; }
+.movecal-section h4 { margin: 0 0 8px; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+
+@media (max-width: 600px) {
+  .movecal-grid { gap: 4px; }
+  .movecal-day { min-height: 42px; padding: 4px; border-radius: 8px; }
+  .movecal-num { font-size: 12px; }
+}
 
 /* "+ Agregar tipo nuevo…" al final del desplegable: separado y con el color de acento,
    para que se lea como una acción y no como una opción más de la lista. */
@@ -543,6 +595,14 @@ input, select, textarea { color: var(--fg); }
 .cd-prop-body b { font-size: 14px; }
 .cd-prop-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
 @media (max-width: 600px) { .cd-props { grid-template-columns: 1fr; } }
+
+/* ── Apartado "Correo" (bandeja de equipo sobre Gmail) ───────────────────── */
+.mail-thread { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; }
+.mail-msg { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); box-shadow: var(--shadow); padding: 14px; }
+.mail-msg-head { margin-bottom: 6px; }
+.mail-msg-body { white-space: pre-wrap; font-size: 14px; line-height: 1.5; }
+.mail-preview { margin-top: 10px; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.mail-preview pre { margin: 4px 0 0; white-space: pre-wrap; font-family: inherit; font-size: 13px; }
 
 /* ══════════════════════════════════════════════════════════════════════════════
    Inventario — listado de avisos

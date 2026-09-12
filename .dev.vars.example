@@ -12,3 +12,12 @@ SUPER_ADMIN_SUBS="dev:local"
 # http://localhost:8787/api/auth/callback/google como redirect URI autorizado.
 # GOOGLE_CLIENT_ID="..."
 # GOOGLE_CLIENT_SECRET="..."
+
+# Apartado "Correo" (bandeja sobre Gmail, ver docs/ideas.md): client de Google Cloud
+# APARTE del login, con la Gmail API habilitada. Agregá
+# http://localhost:8787/api/correo/callback como redirect URI autorizado.
+# GMAIL_CLIENT_ID="..."
+# GMAIL_CLIENT_SECRET="..."
+# Clave AES-GCM que cifra el refresh token en D1 (32 bytes en base64). Generar con:
+#   node -e "console.log(crypto.randomBytes(32).toString('base64'))"
+# MAIL_TOKEN_KEY="..."

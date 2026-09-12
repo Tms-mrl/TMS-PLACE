@@ -23,3 +23,11 @@ export async function clientInAgency(db: D1Database, agencyId: number | null, cl
   const row = await db.prepare('SELECT id FROM clients WHERE id = ? AND agency_id = ?').bind(clientId, agencyId).first();
   return !!row;
 }
+
+/** ¿La sucursal pertenece a la agencia? null = permitido (desasignar). */
+export async function branchInAgency(db: D1Database, agencyId: number | null, branchId: number | null): Promise<boolean> {
+  if (branchId == null) return true;
+  if (agencyId == null) return false;
+  const row = await db.prepare('SELECT id FROM branches WHERE id = ? AND agency_id = ?').bind(branchId, agencyId).first();
+  return !!row;
+}

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import {
   BarChart3, Bath, BedDouble, Calendar as CalendarIcon, CalendarRange, Camera, Check, ChevronDown,
-  Copy, Eye, EyeOff, Home, Link as LinkIcon, MoreHorizontal, Pencil, Ruler,
+  Copy, Eye, EyeOff, Home, Link as LinkIcon, Mail, MoreHorizontal, Pencil, Ruler,
   Share2, Trash2, User, Users,
 } from 'lucide-react';
 import { api } from '../lib/api';
@@ -73,8 +73,13 @@ function MenuItem({ icon, children, onClick, danger, className }: { icon: ReactN
 // ── La fila ──────────────────────────────────────────────────────────────────
 // UNA sola versión para escritorio y celular: el layout es grid y se reacomoda por CSS.
 // Antes había dos componentes (tabla + card mobile) con las mismas acciones duplicadas.
-export function PropertyRow({ p, index, expanded, checked, selectMode, selectedCount, onSelect, onToggle, onManage, onEdit, onCalendar, onSeasonPrices, onShare, onShareAll, onLightbox, onStats, onReload }: {
-  p: Property; index: number; expanded: boolean; checked: boolean; selectMode: boolean; selectedCount: number; onSelect: () => void; onToggle: () => void;
+export function PropertyRow({ p, index, expanded, checked, selectMode, selectedCount, mailAttach, onSelect, onToggle, onManage, onEdit, onCalendar, onSeasonPrices, onShare, onShareAll, onLightbox, onStats, onReload }: {
+  p: Property; index: number; expanded: boolean; checked: boolean; selectMode: boolean; selectedCount: number;
+  /** Modo "elegir para adjuntar a un correo" (ver PropertiesPanel `mailAttach`): cambia
+   *  el botón "Compartir por WhatsApp" por "Enviar por correo" — mismo onShare/onShareAll,
+   *  el padre les pasa una función distinta según el modo. */
+  mailAttach: boolean;
+  onSelect: () => void; onToggle: () => void;
   onManage: () => void; onEdit: () => void; onCalendar: () => void; onSeasonPrices: () => void; onShare: () => void; onShareAll: () => void; onLightbox: (p: Property) => void; onStats: () => void; onReload: () => void;
 }) {
   const confirm = useConfirm();
@@ -188,13 +193,16 @@ export function PropertyRow({ p, index, expanded, checked, selectMode, selectedC
           <CalendarIcon className="h-3.5 w-3.5" /><span>Calendario</span>
         </button>
         {/* Con varias seleccionadas, Compartir de cualquier fila manda TODAS las
-            seleccionadas (evita scrollear hasta la barra de selección de arriba). */}
+            seleccionadas (evita scrollear hasta la barra de selección de arriba).
+            En modo mailAttach (adjuntar a un correo desde Correo → "Adjuntar
+            propiedades") el mismo botón manda por correo en vez de WhatsApp. */}
         <button type="button" className="rbtn" onClick={selectMode ? onShareAll : onShare}
           disabled={!selectMode && !p.external_url}
           title={selectMode
-            ? `Compartir las ${selectedCount} seleccionadas por WhatsApp`
-            : (p.external_url ? 'Compartir por WhatsApp' : 'Falta el link del aviso — cargalo en Editar')}>
-          <Share2 className="h-3.5 w-3.5" /><span>{selectMode ? `Compartir (${selectedCount})` : 'Compartir'}</span>
+            ? `${mailAttach ? 'Enviar' : 'Compartir'} las ${selectedCount} seleccionadas${mailAttach ? ' por correo' : ' por WhatsApp'}`
+            : (p.external_url ? (mailAttach ? 'Enviar por correo' : 'Compartir por WhatsApp') : 'Falta el link del aviso — cargalo en Editar')}>
+          {mailAttach ? <Mail className="h-3.5 w-3.5" /> : <Share2 className="h-3.5 w-3.5" />}
+          <span>{selectMode ? `${mailAttach ? 'Enviar' : 'Compartir'} (${selectedCount})` : (mailAttach ? 'Enviar por correo' : 'Compartir')}</span>
         </button>
 
         <RowMenu label="Más opciones" icon={<MoreHorizontal className="h-3.5 w-3.5" />}>

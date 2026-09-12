@@ -15,7 +15,9 @@ import { deals } from './routes/deals';
 import { contracts } from './routes/contracts';
 import { expenses } from './routes/expenses';
 import { favorites, savedSearches } from './routes/tenant';
+import { correo } from './routes/correo';
 import { runSavedSearchAlerts } from './lib/alerts';
+import { syncGmail } from './lib/gmail';
 
 // El Worker corre PRIMERO en toda request (run_worker_first=true en wrangler.toml):
 // - /api/*         → API JSON (pública o gateada por sesión SSO)
@@ -39,6 +41,7 @@ app.route('/api/contracts', contracts);
 app.route('/api/expenses', expenses);
 app.route('/api/favorites', favorites);
 app.route('/api/saved-searches', savedSearches);
+app.route('/api/correo', correo); // apartado "Correo" — bandeja de equipo sobre Gmail
 
 app.onError((err, c) => serverError(c, err));
 
@@ -119,10 +122,13 @@ app.route('/', publicSite);
 // ── Todo lo demás → assets (SPA de gestión /app/* + estáticos, con fallback SPA) ──
 app.all('*', (c) => c.env.ASSETS.fetch(c.req.raw));
 
-// Cron (ver [triggers] en wrangler.toml): alerta de búsquedas guardadas por email.
-// Dormante hasta que se setee INTERNAL_API_SECRET (runSavedSearchAlerts devuelve 0).
-async function scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
-  ctx.waitUntil(runSavedSearchAlerts(env).catch(() => {}));
+// Cron (ver [triggers] en wrangler.toml): dos triggers distintos, se distinguen por
+// event.cron. "0 13 * * *" = alerta diaria de búsquedas guardadas por email (dormante
+// hasta que se setee INTERNAL_API_SECRET). "* * * * *" = sync de Correo cada 1 min
+// (no hace nada si todavía no se conectó la casilla, ver syncGmail en lib/gmail.ts).
+async function scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
+  if (event.cron === '0 13 * * *') ctx.waitUntil(runSavedSearchAlerts(env).catch(() => {}));
+  else ctx.waitUntil(syncGmail(env).catch((e) => console.error('correo sync', e)));
 }
 
 export default { fetch: app.fetch, scheduled };

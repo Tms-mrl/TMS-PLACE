@@ -5,7 +5,7 @@ import {
 import { SiWhatsapp } from 'react-icons/si';
 import { api } from '../lib/api';
 import { useVisited } from '../lib/use-visited';
-import type { Agency, Branch, Inquiry, Member, Sub, Summary, User } from '../lib/types';
+import type { Agency, Branch, Inquiry, Member, Property, Summary, User } from '../lib/types';
 import { PropertiesPanel, type PropPreset } from './properties-panel';
 import { ClientsPanel } from './clients-panel';
 import { AgencyMap } from './agency-map';
@@ -13,7 +13,10 @@ import { DealsPanel } from './deals-panel';
 import { ContractsPanel } from './contracts-panel';
 import { FinancePanel } from './finance-panel';
 import { SettingsPanel } from './account-menu';
+import { CorreoPanel } from './correo-panel';
+import { CalendarioPanel } from './calendario-panel';
 import { toast } from '../lib/toast';
+import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
@@ -25,10 +28,12 @@ const origin = typeof window !== 'undefined' ? window.location.origin : '';
 const accessUrl = (t: string | null) => (t ? `${origin}/i/${t}` : '');
 const copy = (t: string) => navigator.clipboard?.writeText(t).then(() => {}, () => {});
 
-export type Tab = 'resumen' | 'propiedades' | 'mapa' | 'clientes' | 'operaciones' | 'contratos' | 'finanzas' | 'consultas' | 'sucursales' | 'equipo' | 'configuracion';
+export type Tab = 'resumen' | 'propiedades' | 'mapa' | 'clientes' | 'operaciones' | 'contratos' | 'finanzas' | 'consultas' | 'correo' | 'calendario' | 'sucursales' | 'equipo' | 'configuracion';
 const TABS: { k: Tab; label: string }[] = [
   { k: 'resumen', label: 'Resumen' },
   { k: 'propiedades', label: 'Propiedades' },
+  { k: 'correo', label: 'Correo' },
+  { k: 'calendario', label: 'Calendario' },
   { k: 'mapa', label: 'Mapa' },
   { k: 'clientes', label: 'Clientes' },
   { k: 'operaciones', label: 'Operaciones' },
@@ -44,16 +49,41 @@ export function AgencyWorkspace({ agency, user, onLogout, tab, setTab }: {
   agency: Agency; user: User; onLogout: () => void; tab: Tab; setTab: (t: Tab) => void;
 }) {
   const [summary, setSummary] = useState<Summary | null>(null);
-  const [sub, setSub] = useState<Sub>(null);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [ag, setAg] = useState<Agency>(agency);
   const [preset, setPreset] = useState<PropPreset | undefined>(undefined);
+  const [correoPending, setCorreoPending] = useState(0);
+  // Sucursal del usuario logueado (autoservicio, ver PATCH /api/agencies/mine/branch):
+  // cada persona entra con su propia cuenta de Google, así que esto es por usuario, no
+  // por sesión/dispositivo. Arranca con lo que trajo /api/auth/me y se actualiza local
+  // al cambiar el selector (sin esperar un refetch de todo /auth/me).
+  const [myBranchId, setMyBranchId] = useState<number | null>(user.roles.agency?.branchId ?? null);
+  // "Adjuntar propiedades" desde un hilo de Correo salta a Propiedades con el Inventario
+  // completo (filtros/paginación/selección) en vez de un picker aparte: mailAttaching
+  // prende el modo especial en PropertiesPanel (cambia "Compartir" por "Enviar por
+  // correo" en la barra masiva); mailAttachResult es lo que eligió, que CorreoPanel
+  // consume y limpia al volver. Ambos paneles siguen montados al cambiar de tab
+  // (useVisited), así que el hilo abierto y lo ya tipeado en la respuesta no se pierden.
+  const [mailAttaching, setMailAttaching] = useState(false);
+  const [mailAttachResult, setMailAttachResult] = useState<Property[] | null>(null);
   const visited = useVisited(tab);
 
-  const loadMine = () => api<{ agency: Agency; role: string | null; subscription: Sub; branches: Branch[] }>('/api/agencies/mine')
-    .then((r) => { setSub(r.subscription); setBranches(r.branches || []); if (r.agency) setAg({ ...r.agency, role: r.role || r.agency.role }); }).catch(() => {});
+  function startMailAttach() { setMailAttaching(true); setPreset(undefined); setTab('propiedades'); }
+  function finishMailAttach(list: Property[]) { setMailAttachResult(list); setMailAttaching(false); setTab('correo'); }
+
+  const loadMine = () => api<{ agency: Agency; role: string | null; branches: Branch[] }>('/api/agencies/mine')
+    .then((r) => { setBranches(r.branches || []); if (r.agency) setAg({ ...r.agency, role: r.role || r.agency.role }); }).catch(() => {});
   const loadSummary = () => api<Summary>('/api/agencies/summary').then(setSummary).catch(() => {});
   useEffect(() => { loadMine(); loadSummary(); }, []);
+
+  // Badge de "Correo" pendientes (de mi sucursal): se refresca solo, no hace falta abrir
+  // la pestaña. 60s alcanza para el uso del apartado (no es chat en vivo).
+  useEffect(() => {
+    const loadPending = () => api<{ pendingForMe: number }>('/api/correo/status').then((r) => setCorreoPending(r.pendingForMe)).catch(() => {});
+    loadPending();
+    const t = setInterval(loadPending, 60_000);
+    return () => clearInterval(t);
+  }, []);
 
   // Desde un KPI del Resumen → salta a Propiedades con el filtro aplicado.
   const goProps = (p: PropPreset) => { setPreset(p); setTab('propiedades'); };
@@ -62,24 +92,39 @@ export function AgencyWorkspace({ agency, user, onLogout, tab, setTab }: {
     <div className="ws">
       {/* Se sacó el título "<nombre> / Panel de la inmobiliaria" a pedido de Tomy
           (2026-09-11) — con un solo tenant no aporta nada, es obvio de qué panel es.
-          El badge de suscripción queda, alineado a la derecha (antes lo empujaba el
-          título con justify-content: space-between). */}
+          El chip de suscripción se reemplazó (2026-09-12) por el selector de "tu
+          sucursal" — cada usuario entra con su propia cuenta de Google, así que tiene
+          más sentido acá que el estado del trial/plan (eso lo sigue viendo el admin en
+          Configuración). Alineado a la derecha, igual que el chip que reemplaza. */}
       <div className="ws-head" style={{ justifyContent: 'flex-end' }}>
-        <SubBadge sub={sub} />
+        <MyBranchSelector branches={branches} branchId={myBranchId} onChanged={setMyBranchId} />
       </div>
       <nav className="tabs">
         {TABS.map((t) => (
-          <button key={t.k} className={tab === t.k ? 'tab active' : 'tab'} onClick={() => { setPreset(undefined); setTab(t.k); }}>{t.label}</button>
+          <button key={t.k} className={tab === t.k ? 'tab active' : 'tab'} onClick={() => { setPreset(undefined); if (mailAttaching && t.k !== 'propiedades') setMailAttaching(false); setTab(t.k); }}>
+            {t.label}
+            {t.k === 'correo' && correoPending > 0 && <Badge variant="default" className="ml-1.5">{correoPending}</Badge>}
+          </button>
         ))}
       </nav>
       {visited.has('resumen') && <div hidden={tab !== 'resumen'}><Resumen summary={summary} branches={branches} onFilter={goProps} onNav={setTab} /></div>}
-      {visited.has('propiedades') && <div hidden={tab !== 'propiedades'}><PropertiesPanel branches={branches} onChanged={loadSummary} preset={preset} /></div>}
+      {visited.has('propiedades') && <div hidden={tab !== 'propiedades'}><PropertiesPanel branches={branches} onChanged={loadSummary} preset={preset} mailAttach={mailAttaching} onSendToMail={finishMailAttach} onCancelMailAttach={() => setMailAttaching(false)} /></div>}
       {visited.has('mapa') && <div hidden={tab !== 'mapa'}><AgencyMap branches={branches} active={tab === 'mapa'} /></div>}
       {visited.has('clientes') && <div hidden={tab !== 'clientes'}><ClientsPanel /></div>}
       {visited.has('operaciones') && <div hidden={tab !== 'operaciones'}><DealsPanel /></div>}
       {visited.has('contratos') && <div hidden={tab !== 'contratos'}><ContractsPanel scope="agency" /></div>}
       {visited.has('finanzas') && <div hidden={tab !== 'finanzas'}><FinancePanel scope="agency" businessName={ag.name} /></div>}
       {visited.has('consultas') && <div hidden={tab !== 'consultas'}><ConsultasPanel onGoSettings={() => setTab('configuracion')} /></div>}
+      {visited.has('correo') && (
+        <div hidden={tab !== 'correo'}>
+          <CorreoPanel
+            branches={branches} myBranchId={myBranchId}
+            onStartAttach={startMailAttach}
+            attachResult={mailAttachResult} onConsumeAttachResult={() => setMailAttachResult(null)}
+          />
+        </div>
+      )}
+      {visited.has('calendario') && <div hidden={tab !== 'calendario'}><CalendarioPanel /></div>}
       {visited.has('sucursales') && <div hidden={tab !== 'sucursales'}><BranchesPanel branches={branches} summary={summary} onChanged={() => { loadMine(); loadSummary(); }} /></div>}
       {visited.has('equipo') && <div hidden={tab !== 'equipo'}><TeamPanel branches={branches} /></div>}
       {visited.has('configuracion') && <div hidden={tab !== 'configuracion'}><SettingsPanel user={user} onLogout={onLogout} agency={ag} onAgencySaved={loadMine} /></div>}
@@ -305,9 +350,35 @@ function AddBranch({ onAdded }: { onAdded: () => void }) {
   );
 }
 
-function SubBadge({ sub }: { sub: Sub }) {
-  if (!sub) return null;
-  if (sub.blocked) return <span className="chip blocked">Trial vencido — contactá a Coopen</span>;
-  const left = sub.days_left != null ? `${sub.days_left} días` : '';
-  return <span className={sub.status === 'active' ? 'chip ok' : 'chip'}>{sub.status === 'active' ? `Activa · ${left}` : `Trial · ${left}`}</span>;
+// Autoservicio: "en qué sucursal estoy" para el usuario logueado (PATCH /api/agencies/
+// mine/branch — no requiere admin, cada uno toca solo su propia fila). Distinto del
+// selector de TeamPanel, que es un admin asignando sucursal a OTRA persona.
+function MyBranchSelector({ branches, branchId, onChanged }: {
+  branches: Branch[]; branchId: number | null; onChanged: (id: number | null) => void;
+}) {
+  const [saving, setSaving] = useState(false);
+  if (!branches.length) return null; // nada para elegir todavía (agencia sin sucursales)
+
+  async function change(v: string) {
+    const id = v === NONE ? null : Number(v);
+    setSaving(true);
+    try {
+      await api('/api/agencies/mine/branch', { method: 'PATCH', body: JSON.stringify({ branch_id: id }) });
+      onChanged(id);
+    } catch (e) { toast(String((e as Error).message), 'err'); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+      <span className="muted small">🏢 Tu sucursal</span>
+      <Select value={branchId != null ? String(branchId) : NONE} onValueChange={change} disabled={saving}>
+        <SelectTrigger className="h-9 w-auto min-w-[150px]"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value={NONE}>Sin sucursal</SelectItem>
+          {branches.map((b) => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
+        </SelectContent>
+      </Select>
+    </div>
+  );
 }

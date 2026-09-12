@@ -461,6 +461,45 @@ properties.get('/:id/stats', async (c) => {
   return c.json({ total: agg?.total ?? 0, last7: agg?.last7 ?? 0, last30: agg?.last30 ?? 0, series });
 });
 
+// Ámbito del user (mismo criterio que contracts.ts/expenses.ts). bookings no tiene sus
+// propias columnas de dueño: se filtra vía la propiedad dueña (prefix 'p').
+async function scope(c: any, prefix = ''): Promise<{ where: string; bind: unknown[]; agencyId: number | null }> {
+  const p = prefix ? `${prefix}.` : '';
+  const mine = await getUserAgency(c.env.DB, c.var.user.id);
+  if (mine) return { where: `${p}agency_id = ?`, bind: [mine.agency.id], agencyId: mine.agency.id };
+  return { where: `${p}owner_kind = 'particular' AND ${p}owner_user_id = ?`, bind: [c.var.user.id], agencyId: null };
+}
+
+// ── Calendario de movimientos (agencia, todas las propiedades) ──
+// Solo alquileres CONFIRMADOS (kind='alquiler') — una 'reserva' tentativa no genera
+// eventos acá. from_date = día de ingreso, to_date = día de desocupación: son dos
+// eventos PUNTUALES, no un rango ocupado. Acotado a un mes (?month=YYYY-MM) para no
+// traer el historial completo de la agencia — mismo criterio que expenses.ts (?month=).
+properties.get('/bookings', async (c) => {
+  const monthParam = str(c.req.query('month'), 7);
+  const base = monthParam && /^\d{4}-\d{2}$/.test(monthParam) ? monthParam : new Date().toISOString().slice(0, 7);
+  const y = Number(base.slice(0, 4));
+  const m = Number(base.slice(5, 7));
+  const first = `${base}-01`;
+  const last = `${base}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
+
+  const s = await scope(c, 'p');
+  const res = await c.env.DB
+    .prepare(
+      `SELECT b.id, b.property_id, p.title AS property_title, b.from_date, b.to_date,
+              b.guest_name, b.notes, b.kind, b.client_id, cl.name AS client_name, cl.phone AS client_phone
+       FROM bookings b
+       JOIN properties p ON p.id = b.property_id
+       LEFT JOIN clients cl ON cl.id = b.client_id AND cl.agency_id = ?
+       WHERE ${s.where} AND b.kind = 'alquiler'
+         AND (b.from_date BETWEEN ? AND ? OR b.to_date BETWEEN ? AND ?)
+       ORDER BY p.title, b.from_date LIMIT 2000`,
+    )
+    .bind(s.agencyId ?? -1, ...s.bind, first, last, first, last)
+    .all();
+  return c.json({ bookings: res.results });
+});
+
 // ── Reservas / bloqueos de fechas (temporario) ──
 properties.get('/:id/bookings', async (c) => {
   const id = num(c.req.param('id'));
@@ -499,8 +538,11 @@ properties.post('/:id/bookings', async (c) => {
   const agencyId = (prop.agency_id as number | null) ?? null;
   const clientId = num(body.client_id);
   if (!(await clientInAgency(c.env.DB, agencyId, clientId))) return bad(c, 'Contacto inválido');
+  // Medio-abierto [from, to): el día de salida de una reserva no cuenta como ocupado
+  // (el huésped se va a la mañana, otra familia puede entrar esa misma tarde), así que
+  // una reserva nueva puede arrancar el mismo día en que termina la anterior.
   const clash = await c.env.DB
-    .prepare('SELECT id FROM bookings WHERE property_id = ? AND from_date <= ? AND to_date >= ? LIMIT 1')
+    .prepare('SELECT id FROM bookings WHERE property_id = ? AND from_date < ? AND to_date > ? LIMIT 1')
     .bind(id, to, from)
     .first();
   if (clash) return bad(c, 'Esas fechas se superponen con una reserva existente');

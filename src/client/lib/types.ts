@@ -1,9 +1,29 @@
-export type Agency = { id: number; name: string; role: string; whatsapp?: string | null };
+export type Agency = { id: number; name: string; role: string; whatsapp?: string | null; branchId?: number | null };
 
 export type Inquiry = {
   id: number; property_id: number; property_title: string;
   name: string | null; phone: string | null; message: string | null;
   source: string | null; status: string; created_at: string;
+};
+
+/** Apartado "Correo": un hilo de Gmail sincronizado (ver src/worker/lib/gmail.ts). */
+export type MailThread = {
+  id: number; gmail_thread_id: string; from_addr: string | null; from_name: string | null;
+  subject: string | null; snippet: string | null; last_message_id: string | null;
+  last_from_me: number; received_at: string | null; branch_id: number | null; branch_name: string | null;
+  status: 'nuevo' | 'pendiente' | 'respondido' | 'archivado'; assigned_at: string | null;
+};
+
+/** Mensaje de un hilo, traído de Gmail en vivo (GET /api/correo/threads/:id). */
+export type MailMessage = {
+  id: string; fromName: string | null; fromAddr: string | null; subject: string | null;
+  receivedAt: string | null; bodyText: string;
+  attachments: { id: string; filename: string; mimeType: string; size: number }[];
+};
+
+export type MailStatus = {
+  connected: boolean; email: string | null; lastSyncAt: string | null; lastError: string | null;
+  needsReconnect: boolean; pendingForMe: number;
 };
 
 export type Me = {
@@ -82,6 +102,10 @@ export type Booking = {
   client_id: number | null; client_name: string | null; client_phone: string | null;
   guest_name: string | null; notes: string | null;
 };
+
+/** Fila del calendario agencia-wide (GET /api/properties/bookings): un Booking con la
+ *  propiedad, porque acá el contexto no la implica (a diferencia del calendario por-propiedad). */
+export type AgencyBooking = Booking & { property_id: number; property_title: string };
 
 /** Tarifa por temporada de una propiedad — una por mes. `price_month` vale para todo el
  *  mes; día/semana cambian por quincena (1ª = 1-15, 2ª = 16-fin). Todo ARS, todo opcional.
