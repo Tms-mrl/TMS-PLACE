@@ -5,6 +5,7 @@ import type { Agency, User } from '../lib/types';
 import { toast } from '../lib/toast';
 import { Button } from './ui/button';
 import { useConfirm } from './ui/use-confirm';
+import { InstallAppCard } from './install-app';
 
 // Punto de entrada único a Favoritos/Configuración/Salir, para cualquier rol
 // (agencia, propietario/inquilino). onFavorites es opcional (no todo caller
@@ -157,6 +158,7 @@ export function SettingsPanel({ user, onLogout, agency, onAgencySaved }: {
         </div>
       )}
       {canEditBrand && <TestimonialsEditor />}
+      <InstallAppCard />
       <Button variant="outline" onClick={onLogout}><LogOut className="h-4 w-4" /> Cerrar sesión</Button>
     </div>
   );
