@@ -10,6 +10,7 @@ import { quoteForRange } from '../lib/season-price';
 import { shareBlocks } from '../lib/share-block';
 import { toast } from '../lib/toast';
 import { prefetchClients } from '../lib/clients-cache';
+import { usePoll } from '../lib/use-poll';
 import { CalendarModal } from './calendar-modal';
 import { AskModal, PhotoManager, PropertyForm } from './property-form';
 import { PropertyRow } from './property-row';
@@ -190,6 +191,11 @@ export function PropertiesPanel({ branches, onChanged, preset, mailAttach, onSen
     load();
     prefetchClients();
   }, []);
+  // Alguien en otra sucursal puede cargar un precio o crear una reserva en cualquier
+  // momento: sin esto, no se ve hasta recargar la pestaña a mano. 10min alcanza para
+  // este uso (no es chat en vivo) y no pisa nada abierto: los modales (editing/managing/
+  // cal/etc.) ya tienen su propia copia de la propiedad, no la vuelven a leer de `props`.
+  usePoll(load, 10 * 60_000);
   useEffect(() => {
     if (!preset) return;
     setF({ ...EMPTY_F, status: preset.status || '', branch: preset.branch != null ? String(preset.branch) : '', op: preset.op || '', published: preset.published || '' });

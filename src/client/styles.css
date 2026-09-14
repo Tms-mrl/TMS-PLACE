@@ -603,9 +603,21 @@ input, select, textarea { color: var(--fg); }
 
 /* ── Apartado "Correo" (bandeja de equipo sobre Gmail) ───────────────────── */
 .mail-thread { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; }
-.mail-msg { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); box-shadow: var(--shadow); padding: 14px; }
+.mail-msg { border: 1px solid var(--line); border-radius: var(--radius); background: #fff; box-shadow: var(--shadow); padding: 14px; }
 .mail-msg-head { margin-bottom: 6px; }
 .mail-msg-body { white-space: pre-wrap; font-size: 14px; line-height: 1.5; }
+/* Mail HTML de terceros (BuscadorProp, promos): va en un <iframe sandbox>, no
+   dangerouslySetInnerHTML — ver HtmlMail en correo-panel.tsx. Sin borde propio (el de
+   .mail-msg ya alcanza) y ancho completo; el alto lo fija JS según el contenido real. */
+.mail-html-frame { width: 100%; border: 0; display: block; }
+/* Lista de "Correo": fondo blanco (no el crema del resto del panel) + negrita en
+   no-leídos, como Gmail — .mail-row es un modificador sobre .client-card (compartida
+   con Clientes/Equipo/etc.), no se toca la clase base. */
+.client-card.mail-row { background: #fff; }
+.mail-row .client-name { font-weight: 400; }
+.mail-row .mail-subject { font-weight: 400; color: var(--muted); }
+.mail-row.is-unread .client-name { font-weight: 700; }
+.mail-row.is-unread .mail-subject { font-weight: 700; color: var(--fg); }
 .mail-preview { margin-top: 10px; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
 .mail-preview pre { margin: 4px 0 0; white-space: pre-wrap; font-family: inherit; font-size: 13px; }
 

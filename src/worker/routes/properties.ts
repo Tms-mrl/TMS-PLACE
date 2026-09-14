@@ -541,15 +541,25 @@ properties.post('/:id/bookings', async (c) => {
   // Medio-abierto [from, to): el día de salida de una reserva no cuenta como ocupado
   // (el huésped se va a la mañana, otra familia puede entrar esa misma tarde), así que
   // una reserva nueva puede arrancar el mismo día en que termina la anterior.
-  const clash = await c.env.DB
-    .prepare('SELECT id FROM bookings WHERE property_id = ? AND from_date < ? AND to_date > ? LIMIT 1')
-    .bind(id, to, from)
-    .first();
-  if (clash) return bad(c, 'Esas fechas se superponen con una reserva existente');
+  //
+  // Chequeo + insert en UNA sola sentencia (INSERT...SELECT...WHERE NOT EXISTS) en vez de
+  // un SELECT y un INSERT separados: con dos viajes distintos, dos usuarios (o dos lugares)
+  // que reservan la misma propiedad casi al mismo tiempo pueden pasar ambos el SELECT antes
+  // de que cualquiera haga el INSERT, y terminan doblemente reservadas. D1 serializa las
+  // escrituras de una sentencia como una unidad atómica, así que esta versión no tiene esa
+  // ventana de carrera sin importar qué tan seguido se refresque la pantalla del cliente.
   const row = await c.env.DB
-    .prepare('INSERT INTO bookings (property_id, from_date, to_date, guest_name, notes, kind, client_id) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING *')
-    .bind(id, from, to, str(body.guest_name, 120), str(body.notes, 500), kind, clientId)
+    .prepare(
+      `INSERT INTO bookings (property_id, from_date, to_date, guest_name, notes, kind, client_id)
+       SELECT ?, ?, ?, ?, ?, ?, ?
+       WHERE NOT EXISTS (
+         SELECT 1 FROM bookings WHERE property_id = ? AND from_date < ? AND to_date > ?
+       )
+       RETURNING *`,
+    )
+    .bind(id, from, to, str(body.guest_name, 120), str(body.notes, 500), kind, clientId, id, to, from)
     .first();
+  if (!row) return bad(c, 'Esas fechas se superponen con una reserva existente');
   return c.json({ booking: row }, 201);
 });
 

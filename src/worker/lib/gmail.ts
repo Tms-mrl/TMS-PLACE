@@ -37,6 +37,7 @@ export type MailThreadRow = {
   received_at: string | null;
   branch_id: number | null;
   status: 'nuevo' | 'pendiente' | 'respondido' | 'archivado';
+  unread: number;
   assigned_by: number | null;
   assigned_at: string | null;
   created_at: string;
@@ -245,11 +246,23 @@ function epochMsToSqliteDatetime(ms: string | undefined): string | null {
   return Number.isFinite(n) ? new Date(n).toISOString().slice(0, 19).replace('T', ' ') : null;
 }
 
-function walkParts(part: GmailMessagePart | undefined, out: { text: string | null; html: string | null; attachments: ParsedMessage['attachments'] }) {
+type WalkOut = {
+  text: string | null; html: string | null; attachments: ParsedMessage['attachments'];
+  /** cid (sin < >) → adjunto, para las imágenes embebidas que el HTML referencia como
+   *  src="cid:...". No van en `attachments` (ya se ven inline, mostrarlas también como
+   *  chip descargable sería duplicado — ver rewriteInlineCids más abajo). */
+  cidMap: Record<string, { attachmentId: string; mimeType: string }>;
+};
+
+function walkParts(part: GmailMessagePart | undefined, out: WalkOut) {
   if (!part) return;
   const mime = part.mimeType || '';
+  const disposition = headerValue(part.headers, 'Content-Disposition') || '';
+  const cid = headerValue(part.headers, 'Content-ID')?.replace(/[<>]/g, '') || null;
+  const isInline = /inline/i.test(disposition) || (!!cid && !/attachment/i.test(disposition));
   if (part.filename && part.body?.attachmentId) {
-    out.attachments.push({ id: part.body.attachmentId, filename: part.filename, mimeType: mime, size: part.body.size || 0 });
+    if (cid && isInline) out.cidMap[cid] = { attachmentId: part.body.attachmentId, mimeType: mime };
+    else out.attachments.push({ id: part.body.attachmentId, filename: part.filename, mimeType: mime, size: part.body.size || 0 });
   } else if (mime === 'text/plain' && part.body?.data && out.text == null) {
     out.text = decodeBase64urlText(part.body.data);
   } else if (mime === 'text/html' && part.body?.data && out.html == null) {
@@ -266,13 +279,17 @@ export type ParsedMessage = {
   messageId: string | null;
   receivedAt: string | null;
   bodyText: string;
+  /** HTML original (sin sanitizar ni reescribir cid:) — usar `renderableHtml()` antes de
+   *  mandarlo al cliente, nunca esto directo. */
+  bodyHtml: string | null;
+  cidMap: Record<string, { attachmentId: string; mimeType: string }>;
   attachments: Array<{ id: string; filename: string; mimeType: string; size: number }>;
 };
 
 export function parseMessage(msg: GmailMessage): ParsedMessage {
   const headers = msg.payload?.headers;
   const from = parseFromHeader(headerValue(headers, 'From'));
-  const out: { text: string | null; html: string | null; attachments: ParsedMessage['attachments'] } = { text: null, html: null, attachments: [] };
+  const out: WalkOut = { text: null, html: null, attachments: [], cidMap: {} };
   walkParts(msg.payload, out);
   return {
     id: msg.id,
@@ -282,8 +299,49 @@ export function parseMessage(msg: GmailMessage): ParsedMessage {
     messageId: headerValue(headers, 'Message-ID'),
     receivedAt: epochMsToSqliteDatetime(msg.internalDate),
     bodyText: out.text ?? (out.html ? stripHtml(out.html) : msg.snippet || ''),
+    bodyHtml: out.html,
+    cidMap: out.cidMap,
     attachments: out.attachments,
   };
+}
+
+// ── HTML del mensaje, listo para mostrar (GET /threads/:id) ────────────────────────
+// El HTML de un mail de terceros SIEMPRE se renderiza en un <iframe sandbox> del lado
+// del cliente (aísla CSS/scripts del resto del panel — ver correo-panel.tsx) — esto de
+// acá es una segunda capa (defensa en profundidad, no la única): saca <script>,
+// handlers on*= y href/src "javascript:", resuelve las imágenes inline (cid:) a la URL
+// del adjunto, y fuerza que los links abran en pestaña nueva en vez de navegar el iframe.
+function sanitizeEmailHtml(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/\son\w+\s*=\s*"(?:[^"\\]|\\.)*"/gi, '')
+    .replace(/\son\w+\s*=\s*'(?:[^'\\]|\\.)*'/gi, '')
+    .replace(/\son\w+\s*=\s*[^\s>]+/gi, '')
+    .replace(/(href|src)(\s*=\s*)(["'])\s*javascript:[^"']*\3/gi, '$1$2$3#$3');
+}
+
+function rewriteInlineCids(html: string, cidMap: ParsedMessage['cidMap'], threadId: number, messageId: string): string {
+  if (!Object.keys(cidMap).length) return html;
+  return html.replace(/cid:([^"'\s)]+)/gi, (full, rawCid: string) => {
+    const hit = cidMap[decodeURIComponent(rawCid)];
+    return hit ? `/api/correo/threads/${threadId}/attachments/${messageId}/${hit.attachmentId}` : full;
+  });
+}
+
+function withBaseTarget(html: string): string {
+  const base = '<base target="_blank" rel="noopener noreferrer">';
+  if (/<head[^>]*>/i.test(html)) return html.replace(/<head[^>]*>/i, (m) => `${m}${base}`);
+  if (/<html[^>]*>/i.test(html)) return html.replace(/<html[^>]*>/i, (m) => `${m}<head>${base}</head>`);
+  return `${base}${html}`;
+}
+
+/** Pipeline completo: sanitizar → resolver cid: → forzar target=_blank. Lo único que
+ *  routes/correo.ts debe mandar al cliente como `bodyHtml`. */
+export function renderableHtml(msg: ParsedMessage, threadId: number): string | null {
+  if (!msg.bodyHtml) return null;
+  const clean = sanitizeEmailHtml(msg.bodyHtml);
+  const withImgs = rewriteInlineCids(clean, msg.cidMap, threadId, msg.id);
+  return withBaseTarget(withImgs);
 }
 
 // ── Enviar respuesta (MIME propio, threadeado) ──────────────────────────────────
@@ -391,16 +449,20 @@ async function syncOneThread(env: Env, gmailThreadId: string, myEmail: string): 
   const existing = await env.DB.prepare('SELECT status FROM mail_threads WHERE gmail_thread_id = ?').bind(gmailThreadId).first<{ status: string }>();
   // Un entrante nuevo en un hilo que ya estaba "respondido" lo vuelve a abrir.
   const nextStatus = !existing ? 'nuevo' : !lastFromMe && existing.status === 'respondido' ? 'pendiente' : existing.status;
+  // No-leído = el último mensaje del hilo es del otro lado (igual que Gmail: negrita
+  // hasta que alguien del equipo lo abre — ver GET /threads/:id). Si el último mensaje
+  // es nuestro (ya lo contestamos), no tiene sentido mostrarlo en negrita.
+  const unread = lastFromMe ? 0 : 1;
 
   await env.DB.prepare(
-    `INSERT INTO mail_threads (gmail_thread_id, from_addr, from_name, subject, snippet, last_message_id, last_from_me, received_at, status, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    `INSERT INTO mail_threads (gmail_thread_id, from_addr, from_name, subject, snippet, last_message_id, last_from_me, received_at, status, unread, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
      ON CONFLICT(gmail_thread_id) DO UPDATE SET
        from_addr = excluded.from_addr, from_name = excluded.from_name, subject = excluded.subject,
        snippet = excluded.snippet, last_message_id = excluded.last_message_id, last_from_me = excluded.last_from_me,
-       received_at = excluded.received_at, status = excluded.status, updated_at = datetime('now')`,
+       received_at = excluded.received_at, status = excluded.status, unread = excluded.unread, updated_at = datetime('now')`,
   ).bind(
     gmailThreadId, counterpart.fromAddr, counterpart.fromName, original.subject, counterpart.bodyText.slice(0, 200),
-    last.messageId, lastFromMe ? 1 : 0, last.receivedAt, nextStatus,
+    last.messageId, lastFromMe ? 1 : 0, last.receivedAt, nextStatus, unread,
   ).run();
 }

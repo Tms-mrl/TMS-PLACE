@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { api } from '../lib/api';
 import type { AgencyBooking } from '../lib/types';
+import { usePoll } from '../lib/use-poll';
 import { fmtDay } from './calendar-modal';
 import { Modal } from './property-form';
 import { Button } from './ui/button';
@@ -33,13 +34,18 @@ export function CalendarioPanel() {
   const [openDay, setOpenDay] = useState<string | null>(null);
 
   const monthParam = `${ym.y}-${pad(ym.m + 1)}`;
-  useEffect(() => {
-    setLoaded(false);
-    api<{ bookings: AgencyBooking[] }>(`/api/properties/bookings?month=${monthParam}`)
+  const load = (silent?: boolean) => {
+    if (!silent) setLoaded(false);
+    return api<{ bookings: AgencyBooking[] }>(`/api/properties/bookings?month=${monthParam}`)
       .then((r) => setBookings(r.bookings))
-      .catch(() => setBookings([]))
+      .catch(() => { if (!silent) setBookings([]); })
       .finally(() => setLoaded(true));
-  }, [monthParam]);
+  };
+  useEffect(() => { load(); }, [monthParam]);
+  // Otra sucursal puede cargar un ingreso/desocupación en cualquier momento: sin esto no
+  // se ve hasta recargar a mano. `silent` evita el parpadeo de "Cargando…" en cada tick;
+  // si hay un día abierto (openDay), el detalle se recalcula solo vía dayMap (useMemo).
+  usePoll(() => load(true), 10 * 60_000);
 
   const dayMap = useMemo(() => buildDayMap(bookings), [bookings]);
   const monthName = new Date(ym.y, ym.m, 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });

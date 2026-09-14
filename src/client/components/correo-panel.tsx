@@ -3,6 +3,7 @@ import { ArrowLeft, Mail, Paperclip, RefreshCw } from 'lucide-react';
 import { api } from '../lib/api';
 import { toast } from '../lib/toast';
 import type { Branch, MailMessage, MailStatus, MailThread, Property } from '../lib/types';
+import { usePoll } from '../lib/use-poll';
 import { shareBlocks } from '../lib/share-block';
 import { DateRangePicker } from './properties-panel';
 import { Button } from './ui/button';
@@ -77,6 +78,11 @@ export function CorreoPanel({ branches, myBranchId, onStartAttach, attachResult,
   useEffect(() => {
     if (status?.connected && !status.lastSyncAt && !autoSynced.current) { autoSynced.current = true; syncNow(); }
   }, [status?.connected, status?.lastSyncAt]);
+  // Releer la lista (no re-sincronizar Gmail, eso ya lo hace el cron de 1min server-side):
+  // otra persona puede asignar un hilo a "respondido"/cambiar de sucursal y sin esto no se
+  // ve hasta recargar a mano. Sigue corriendo aunque haya un hilo abierto (ThreadDetail es
+  // otro componente con su propio estado; no le toca el borrador de respuesta).
+  usePoll(() => { if (status?.connected) { loadThreads(); loadStatus(); } }, 6 * 60_000);
 
   if (openId != null) {
     return (
@@ -156,23 +162,32 @@ export function CorreoPanel({ branches, myBranchId, onStartAttach, attachResult,
         </p>
       ) : (
         <div className="client-list">
-          {filtered.map((t) => (
-            <div
-              className="client-card" key={t.id} role="button" tabIndex={0} style={{ cursor: 'pointer' }}
-              onClick={() => setOpenId(t.id)}
-              onKeyDown={(e) => { if (e.key === 'Enter') setOpenId(t.id); }}
-            >
-              <div className="client-main">
-                <div className="client-name">
-                  {t.from_name || t.from_addr || '(sin remitente)'}{' '}
-                  <span className={STATUS_CHIP[t.status]}>{STATUS_LABEL[t.status]}</span>
-                  {t.branch_name && <span className="chip">🏢 {t.branch_name}</span>}
+          {filtered.map((t) => {
+            // Como en Gmail: abrir el hilo lo saca de negrita al toque (el server lo
+            // marca leído en el mismo GET /threads/:id, esto es solo para no esperar
+            // el round-trip). `openThread` hace las dos cosas juntas.
+            const openThread = () => {
+              setThreads((ts) => ts.map((x) => (x.id === t.id ? { ...x, unread: 0 } : x)));
+              setOpenId(t.id);
+            };
+            return (
+              <div
+                className={`client-card mail-row${t.unread ? ' is-unread' : ''}`} key={t.id} role="button" tabIndex={0} style={{ cursor: 'pointer' }}
+                onClick={openThread}
+                onKeyDown={(e) => { if (e.key === 'Enter') openThread(); }}
+              >
+                <div className="client-main">
+                  <div className="client-name">
+                    {t.from_name || t.from_addr || '(sin remitente)'}{' '}
+                    <span className={STATUS_CHIP[t.status]}>{STATUS_LABEL[t.status]}</span>
+                    {t.branch_name && <span className="chip">🏢 {t.branch_name}</span>}
+                  </div>
+                  <div className="small mail-subject">{t.subject || '(sin asunto)'}</div>
+                  <div className="muted small">{t.snippet}{t.received_at ? ` · ${fmt(t.received_at)}` : ''}</div>
                 </div>
-                <div className="small">{t.subject || '(sin asunto)'}</div>
-                <div className="muted small">{t.snippet}{t.received_at ? ` · ${fmt(t.received_at)}` : ''}</div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -181,6 +196,47 @@ export function CorreoPanel({ branches, myBranchId, onStartAttach, attachResult,
 
 function BackBtn({ onBack }: { onBack: () => void }) {
   return <button className="btn ghost sm" onClick={onBack} style={{ marginBottom: 12 }}><ArrowLeft className="h-4 w-4" /> Volver</button>;
+}
+
+/** Cuerpo HTML de un mail (BuscadorProp, promos, etc.) en un <iframe sandbox>: aísla el
+ *  CSS/markup de terceros del resto del panel (un <style> sin scope del mail rompería
+ *  las clases de toda la app si se pintara con dangerouslySetInnerHTML directo) y evita
+ *  que corra cualquier script (sandbox sin allow-scripts — el html ya viene sanitizado
+ *  server-side, esto es la barrera real). allow-same-origin es solo para poder medir
+ *  el alto real del contenido y auto-ajustar el iframe; sin allow-scripts, sigue sin
+ *  poder ejecutar JS. allow-popups deja que los links (ej. "Ver Propiedad") abran en
+ *  pestaña nueva en vez de quedar inertes. */
+function HtmlMail({ html }: { html: string }) {
+  const ref = useRef<HTMLIFrameElement>(null);
+  const [h, setH] = useState(220);
+  // Un solo onLoad no alcanza: imágenes remotas (fotos, logos) pueden terminar de cargar
+  // un toque después del load del documento y cambiar el alto real — un ResizeObserver
+  // sobre el <body> del iframe lo sigue ajustando mientras el mensaje esté montado.
+  useEffect(() => {
+    const iframe = ref.current;
+    if (!iframe) return;
+    let ro: ResizeObserver | null = null;
+    const onLoad = () => {
+      const doc = iframe.contentDocument;
+      if (!doc?.body) return;
+      const measure = () => setH(Math.max(doc.documentElement.scrollHeight, doc.body.scrollHeight, 80) + 16);
+      measure();
+      ro = new ResizeObserver(measure);
+      ro.observe(doc.body);
+    };
+    iframe.addEventListener('load', onLoad);
+    return () => { iframe.removeEventListener('load', onLoad); ro?.disconnect(); };
+  }, [html]);
+  return (
+    <iframe
+      ref={ref}
+      className="mail-html-frame"
+      srcDoc={html}
+      sandbox="allow-same-origin allow-popups"
+      referrerPolicy="no-referrer"
+      style={{ height: h }}
+    />
+  );
 }
 
 function ThreadDetail({ id, branches, onBack, onStartAttach, attachResult, onConsumeAttachResult }: {
@@ -270,7 +326,7 @@ function ThreadDetail({ id, branches, onBack, onStartAttach, attachResult, onCon
         {messages.map((m) => (
           <div className="mail-msg" key={m.id}>
             <div className="muted small mail-msg-head"><b>{m.fromName || m.fromAddr}</b> · {fmt(m.receivedAt)}</div>
-            <div className="mail-msg-body">{m.bodyText}</div>
+            {m.bodyHtml ? <HtmlMail html={m.bodyHtml} /> : <div className="mail-msg-body">{m.bodyText}</div>}
             {m.attachments.length > 0 && (
               <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
                 {m.attachments.map((a) => (

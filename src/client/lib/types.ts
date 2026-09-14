@@ -11,13 +11,15 @@ export type MailThread = {
   id: number; gmail_thread_id: string; from_addr: string | null; from_name: string | null;
   subject: string | null; snippet: string | null; last_message_id: string | null;
   last_from_me: number; received_at: string | null; branch_id: number | null; branch_name: string | null;
-  status: 'nuevo' | 'pendiente' | 'respondido' | 'archivado'; assigned_at: string | null;
+  status: 'nuevo' | 'pendiente' | 'respondido' | 'archivado'; unread: number; assigned_at: string | null;
 };
 
-/** Mensaje de un hilo, traído de Gmail en vivo (GET /api/correo/threads/:id). */
+/** Mensaje de un hilo, traído de Gmail en vivo (GET /api/correo/threads/:id). `bodyHtml`
+ *  ya viene sanitizado/con los cid: resueltos (ver renderableHtml en worker/lib/gmail.ts)
+ *  — igual se pinta en un <iframe sandbox>, nunca con dangerouslySetInnerHTML directo. */
 export type MailMessage = {
   id: string; fromName: string | null; fromAddr: string | null; subject: string | null;
-  receivedAt: string | null; bodyText: string;
+  receivedAt: string | null; bodyText: string; bodyHtml: string | null;
   attachments: { id: string; filename: string; mimeType: string; size: number }[];
 };
 

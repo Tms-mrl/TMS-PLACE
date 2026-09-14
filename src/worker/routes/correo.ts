@@ -6,7 +6,7 @@ import { genToken, readCookie } from '../lib/auth';
 import { branchInAgency } from '../lib/ownership';
 import {
   GMAIL_SCOPES, GmailNeedsReconnect, accountNeedsReconnect, disconnectMailAccount,
-  gmailCallbackUrl, getAttachment, getMailAccount, getThread, parseMessage,
+  gmailCallbackUrl, getAttachment, getMailAccount, getThread, parseMessage, renderableHtml,
   saveMailAccount, sendReply, syncGmail, type MailThreadRow,
 } from '../lib/gmail';
 
@@ -178,7 +178,20 @@ correo.get('/threads/:id', async (c) => {
   if (!row) return notFound(c, 'Hilo no encontrado');
   try {
     const thread = await getThread(c.env, row.gmail_thread_id, 'full');
-    const messages = (thread.messages || []).map(parseMessage);
+    // El HTML de terceros nunca sale de acá crudo (ver renderableHtml en gmail.ts): el
+    // cliente lo pinta en un <iframe sandbox>, esto es la 2ª capa (script/handlers
+    // afuera, cid: resueltos a la URL del adjunto, links con target=_blank).
+    const messages = (thread.messages || []).map(parseMessage).map((m) => ({
+      id: m.id, fromName: m.fromName, fromAddr: m.fromAddr, subject: m.subject,
+      receivedAt: m.receivedAt, bodyText: m.bodyText, bodyHtml: renderableHtml(m, id),
+      attachments: m.attachments,
+    }));
+    // Abrir el hilo = marcarlo leído (como Gmail). Si falla el fetch de arriba no
+    // llegamos acá, así que un hilo que no se pudo traer no queda falsamente leído.
+    if (row.unread) {
+      await c.env.DB.prepare('UPDATE mail_threads SET unread = 0 WHERE id = ?').bind(id).run();
+      row.unread = 0;
+    }
     return c.json({ thread: row, messages });
   } catch (e) {
     if (e instanceof GmailNeedsReconnect) return c.json({ error: e.message, code: 'GMAIL_RECONNECT' }, 409);
@@ -262,7 +275,7 @@ correo.post('/threads/:id/reply', async (c) => {
   }
 
   await c.env.DB
-    .prepare("UPDATE mail_threads SET status = 'respondido', last_from_me = 1, updated_at = datetime('now') WHERE id = ?")
+    .prepare("UPDATE mail_threads SET status = 'respondido', last_from_me = 1, unread = 0, updated_at = datetime('now') WHERE id = ?")
     .bind(id)
     .run();
   const updated = await c.env.DB.prepare(threadSelect('WHERE t.id = ?')).bind(id).first();
