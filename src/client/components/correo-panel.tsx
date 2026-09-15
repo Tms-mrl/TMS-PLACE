@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Mail, Paperclip, RefreshCw } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronRight, Mail, Paperclip, Pencil, Reply, RefreshCw } from 'lucide-react';
 import { api } from '../lib/api';
 import { toast } from '../lib/toast';
 import type { Branch, MailMessage, MailStatus, MailThread, Property } from '../lib/types';
 import { usePoll } from '../lib/use-poll';
 import { shareBlocks } from '../lib/share-block';
 import { DateRangePicker } from './properties-panel';
+import { Modal } from './property-form';
 import { Button } from './ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
@@ -51,6 +52,7 @@ export function CorreoPanel({ branches, myBranchId, onStartAttach, attachResult,
   const [fBranch, setFBranch] = useState<'all' | 'mine'>('all');
   const [q, setQ] = useState('');
   const [syncing, setSyncing] = useState(false);
+  const [composing, setComposing] = useState(false);
   const autoSynced = useRef(false);
 
   const loadStatus = () => api<MailStatus>('/api/correo/status').then(setStatus).catch(() => {});
@@ -149,6 +151,9 @@ export function CorreoPanel({ branches, myBranchId, onStartAttach, attachResult,
           </Select>
         )}
         <input placeholder="Buscar…" value={q} onChange={(e) => setQ(e.target.value)} style={{ flex: '1 1 200px' }} />
+        <Button variant="outline" size="sm" onClick={() => setComposing(true)}>
+          <Pencil className="h-4 w-4" />Redactar
+        </Button>
         <Button variant="ghost" size="icon" title="Buscar mensajes nuevos en Gmail" onClick={syncNow} disabled={syncing}>
           <RefreshCw className={syncing ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
         </Button>
@@ -190,7 +195,47 @@ export function CorreoPanel({ branches, myBranchId, onStartAttach, attachResult,
           })}
         </div>
       )}
+      {composing && (
+        <ComposeModal
+          onClose={() => setComposing(false)}
+          onSent={(thread) => { setComposing(false); setThreads((ts) => [thread, ...ts]); setOpenId(thread.id); }}
+        />
+      )}
     </div>
+  );
+}
+
+function ComposeModal({ onClose, onSent }: { onClose: () => void; onSent: (thread: MailThread) => void }) {
+  const [to, setTo] = useState('');
+  const [subject, setSubject] = useState('');
+  const [text, setText] = useState('');
+  const [sending, setSending] = useState(false);
+
+  async function send() {
+    if (!to.trim()) return toast('Falta la dirección de destino', 'err');
+    if (!text.trim()) return toast('Escribí un mensaje', 'err');
+    setSending(true);
+    try {
+      const r = await api<{ thread: MailThread }>('/api/correo/compose', {
+        method: 'POST',
+        body: JSON.stringify({ to: to.trim(), subject: subject.trim(), body: text }),
+      });
+      toast('Mensaje enviado', 'ok');
+      onSent(r.thread);
+    } catch (e) { toast(String((e as Error).message), 'err'); }
+    finally { setSending(false); }
+  }
+
+  return (
+    <Modal title="Redactar" onClose={onClose}>
+      <label className="fld"><span className="fld-lbl">Para</span><input type="email" placeholder="destinatario@mail.com" value={to} onChange={(e) => setTo(e.target.value)} /></label>
+      <label className="fld" style={{ marginTop: 10 }}><span className="fld-lbl">Asunto</span><input value={subject} onChange={(e) => setSubject(e.target.value)} /></label>
+      <label className="fld" style={{ marginTop: 10 }}>
+        <span className="fld-lbl">Mensaje</span>
+        <textarea rows={8} placeholder="Escribí el mensaje…" value={text} onChange={(e) => setText(e.target.value)} />
+      </label>
+      <Button style={{ marginTop: 12 }} onClick={send} disabled={sending}>{sending ? 'Enviando…' : 'Enviar'}</Button>
+    </Modal>
   );
 }
 
@@ -251,6 +296,16 @@ function ThreadDetail({ id, branches, onBack, onStartAttach, attachResult, onCon
   const [attached, setAttached] = useState<Property[]>([]);
   const [dFrom, setDFrom] = useState('');
   const [dTo, setDTo] = useState('');
+  const replyBoxRef = useRef<HTMLDivElement>(null);
+  // Como Gmail: solo el último mensaje del hilo arranca expandido, los anteriores se
+  // colapsan a una línea — ahorra el scroll que había que hacer para llegar a
+  // "Responder" en un hilo largo. Se clickean para abrir/cerrar (el último es fijo).
+  const [expandedIdx, setExpandedIdx] = useState<Set<number>>(new Set());
+  const toggleExpanded = (i: number) => setExpandedIdx((prev) => {
+    const next = new Set(prev);
+    if (next.has(i)) next.delete(i); else next.add(i);
+    return next;
+  });
 
   const load = () => {
     setErr('');
@@ -323,24 +378,43 @@ function ThreadDetail({ id, branches, onBack, onStartAttach, attachResult, onCon
       </div>
 
       <div className="mail-thread">
-        {messages.map((m) => (
-          <div className="mail-msg" key={m.id}>
-            <div className="muted small mail-msg-head"><b>{m.fromName || m.fromAddr}</b> · {fmt(m.receivedAt)}</div>
-            {m.bodyHtml ? <HtmlMail html={m.bodyHtml} /> : <div className="mail-msg-body">{m.bodyText}</div>}
-            {m.attachments.length > 0 && (
-              <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
-                {m.attachments.map((a) => (
-                  <a key={a.id} className="chip-btn" href={`/api/correo/threads/${id}/attachments/${m.id}/${a.id}`} target="_blank" rel="noopener noreferrer">
-                    📎 {a.filename}
-                  </a>
-                ))}
+        {messages.map((m, i) => {
+          const isLast = i === messages.length - 1;
+          const open = isLast || expandedIdx.has(i);
+          return (
+            <div className="mail-msg" key={m.id}>
+              <div
+                className="muted small mail-msg-head"
+                style={{ cursor: isLast ? 'default' : 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                onClick={() => { if (!isLast) toggleExpanded(i); }}
+              >
+                {!isLast && (open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />)}
+                <b>{m.fromName || m.fromAddr}</b> · {fmt(m.receivedAt)}
               </div>
-            )}
-          </div>
-        ))}
+              {open ? (
+                <>
+                  {m.bodyHtml ? <HtmlMail html={m.bodyHtml} /> : <div className="mail-msg-body">{m.bodyText}</div>}
+                  {m.attachments.length > 0 && (
+                    <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+                      {m.attachments.map((a) => (
+                        <a key={a.id} className="chip-btn" href={`/api/correo/threads/${id}/attachments/${m.id}/${a.id}`} target="_blank" rel="noopener noreferrer">
+                          📎 {a.filename}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="muted small mail-msg-collapsed" onClick={() => toggleExpanded(i)} style={{ cursor: 'pointer' }}>
+                  {(m.bodyText || '').replace(/\s+/g, ' ').trim().slice(0, 140) || '(sin contenido)'}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
-      <div className="panel-lite" style={{ marginTop: 16 }}>
+      <div className="panel-lite" style={{ marginTop: 16 }} ref={replyBoxRef}>
         <h4>Responder</h4>
         <textarea rows={4} placeholder="Escribí la respuesta…" value={replyText} onChange={(e) => setReplyText(e.target.value)} />
         <div className="row" style={{ gap: 10, marginTop: 10, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -360,6 +434,14 @@ function ThreadDetail({ id, branches, onBack, onStartAttach, attachResult, onCon
         )}
         <Button style={{ marginTop: 12 }} onClick={send} disabled={sending}>{sending ? 'Enviando…' : 'Enviar respuesta'}</Button>
       </div>
+      <button
+        type="button"
+        className="mail-jump-reply"
+        title="Ir a responder"
+        onClick={() => replyBoxRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+      >
+        <Reply className="h-5 w-5" />
+      </button>
     </div>
   );
 }

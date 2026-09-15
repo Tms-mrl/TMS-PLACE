@@ -7,7 +7,7 @@ import { branchInAgency } from '../lib/ownership';
 import {
   GMAIL_SCOPES, GmailNeedsReconnect, accountNeedsReconnect, disconnectMailAccount,
   gmailCallbackUrl, getAttachment, getMailAccount, getThread, parseMessage, renderableHtml,
-  saveMailAccount, sendReply, syncGmail, type MailThreadRow,
+  saveMailAccount, sendNewMessage, sendReply, syncGmail, syncOneThread, type MailThreadRow,
 } from '../lib/gmail';
 
 // Apartado "Correo": bandeja de equipo sobre la casilla elmuellepropiedades@gmail.com (API de
@@ -280,4 +280,43 @@ correo.post('/threads/:id/reply', async (c) => {
     .run();
   const updated = await c.env.DB.prepare(threadSelect('WHERE t.id = ?')).bind(id).first();
   return c.json({ thread: updated });
+});
+
+// Redactar (no responder a nada existente) — Gmail arranca un hilo propio porque
+// sendNewMessage no manda threadId. Como no hay fila previa en mail_threads (a
+// diferencia de una respuesta), la insertamos al toque con syncOneThread en vez de
+// esperar al próximo tick del cron de 1 min, y forzamos 'respondido' igual que /reply
+// (syncOneThread por sí solo la dejaría en 'nuevo', pensado para entrantes).
+correo.post('/compose', async (c) => {
+  const mine = await getUserAgency(c.env.DB, c.var.user.id);
+  if (!mine) return forbidden(c, 'Sin acceso');
+  const account = await getMailAccount(c.env);
+  if (!account) return bad(c, 'La casilla de Gmail no está conectada');
+
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  const toAddr = str(body.to, 320);
+  const subject = str(body.subject, 300) || '(sin asunto)';
+  const text = str(body.body, 20000);
+  if (!toAddr || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(toAddr)) return bad(c, 'Dirección de destino inválida');
+  if (!text) return bad(c, 'Falta el texto del mensaje');
+
+  // Solo el envío en sí va en el try/catch (mismo criterio que /reply): si esto tira,
+  // no se mandó nada y el mensaje de error de abajo es correcto. Si en cambio falla el
+  // upsert/UPDATE de después, el mail YA salió — no queremos devolver "no se pudo
+  // enviar" sobre un envío que sí ocurrió (eso invitaría a reintentar y duplicarlo).
+  let sent: { id: string; threadId: string };
+  try {
+    sent = await sendNewMessage(c.env, { toAddr, subject, bodyText: text });
+  } catch (e) {
+    if (e instanceof GmailNeedsReconnect) return c.json({ error: e.message, code: 'GMAIL_RECONNECT' }, 409);
+    return c.json({ error: 'No se pudo enviar el mensaje', detail: e instanceof Error ? e.message : String(e) }, 502);
+  }
+
+  await syncOneThread(c.env, sent.threadId, account.email);
+  await c.env.DB
+    .prepare("UPDATE mail_threads SET status = 'respondido', last_from_me = 1, unread = 0, updated_at = datetime('now') WHERE gmail_thread_id = ?")
+    .bind(sent.threadId)
+    .run();
+  const row = await c.env.DB.prepare(threadSelect('WHERE t.gmail_thread_id = ?')).bind(sent.threadId).first();
+  return c.json({ thread: row });
 });

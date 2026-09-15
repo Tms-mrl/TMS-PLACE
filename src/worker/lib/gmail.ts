@@ -356,17 +356,16 @@ function encodeHeaderValue(v: string): string {
   return /^[\x20-\x7e]*$/.test(v) ? v : `=?UTF-8?B?${btoa(unescape(encodeURIComponent(v)))}?=`;
 }
 
-export async function sendReply(env: Env, opts: {
-  threadId: string; toAddr: string; subject: string; bodyText: string;
-  inReplyTo?: string | null; references?: string | null;
+async function sendRaw(env: Env, opts: {
+  toAddr: string; subject: string; bodyText: string;
+  threadId?: string; inReplyTo?: string | null; references?: string | null;
 }): Promise<{ id: string; threadId: string }> {
   const account = await getMailAccount(env);
   if (!account) throw new GmailNeedsReconnect('La casilla de Gmail no está conectada');
-  const subject = /^re:/i.test(opts.subject) ? opts.subject : `Re: ${opts.subject}`;
   const lines = [
     `From: El Muelle <${account.email}>`,
     `To: ${opts.toAddr}`,
-    `Subject: ${encodeHeaderValue(subject)}`,
+    `Subject: ${encodeHeaderValue(opts.subject)}`,
   ];
   if (opts.inReplyTo) lines.push(`In-Reply-To: ${opts.inReplyTo}`);
   if (opts.references) lines.push(`References: ${opts.references}`);
@@ -381,10 +380,26 @@ export async function sendReply(env: Env, opts: {
   const res = await gmailFetch(env, '/messages/send', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ raw, threadId: opts.threadId }),
+    body: JSON.stringify(opts.threadId ? { raw, threadId: opts.threadId } : { raw }),
   });
-  if (!res.ok) throw new Error(`Gmail sendReply ${res.status}: ${await res.text().catch(() => '')}`);
+  if (!res.ok) throw new Error(`Gmail send ${res.status}: ${await res.text().catch(() => '')}`);
   return res.json();
+}
+
+export async function sendReply(env: Env, opts: {
+  threadId: string; toAddr: string; subject: string; bodyText: string;
+  inReplyTo?: string | null; references?: string | null;
+}): Promise<{ id: string; threadId: string }> {
+  const subject = /^re:/i.test(opts.subject) ? opts.subject : `Re: ${opts.subject}`;
+  return sendRaw(env, { ...opts, subject });
+}
+
+/** Redactar un mensaje nuevo (no una respuesta): sin threadId/In-Reply-To/References,
+ *  así Gmail arranca un hilo propio en vez de engancharlo a uno existente. */
+export async function sendNewMessage(env: Env, opts: {
+  toAddr: string; subject: string; bodyText: string;
+}): Promise<{ id: string; threadId: string }> {
+  return sendRaw(env, opts);
 }
 
 // ── Sync incremental (llamado desde el cron de 1 min, ver scheduled() en index.ts) ──
@@ -433,7 +448,9 @@ export async function syncGmail(env: Env): Promise<void> {
   }
 }
 
-async function syncOneThread(env: Env, gmailThreadId: string, myEmail: string): Promise<void> {
+/** Exportada para poder insertar/actualizar un hilo al toque después de mandar un mail
+ *  (compose/reply), sin depender del próximo tick del cron de 1 min. */
+export async function syncOneThread(env: Env, gmailThreadId: string, myEmail: string): Promise<void> {
   const thread = await getThread(env, gmailThreadId, 'metadata');
   const messages = thread.messages || [];
   if (!messages.length) return;
