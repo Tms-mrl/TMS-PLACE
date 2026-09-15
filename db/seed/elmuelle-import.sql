@@ -1,5 +1,5 @@
 -- El Muelle · import de cartera desde elmuellepropiedades.com.ar (BuscadorProp)
--- Generado por scripts/import-elmuelle.mjs — 2026-09-04 — 251 propiedades.
+-- Generado por scripts/import-elmuelle.mjs — 2026-09-15 — 251 propiedades.
 -- Idempotente: ON CONFLICT(external_url). Requiere la migración 0018 (índice único parcial)
 -- y las 3 sucursales reales (db/seed/elmuelle-branches-real.sql). Las fotos van aparte:
 --   node scripts/import-elmuelle.mjs photos --local

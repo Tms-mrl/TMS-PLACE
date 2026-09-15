@@ -97,9 +97,9 @@ const KIND_MAP = {
 // localidad -> branch_id (las 3 oficinas reales; ver db/seed/elmuelle-branches-real.sql)
 //   1 = Rebagliati 12 (La Lucila del Mar) · 2 = Chiozza 3332 (San Bernardo) · 3 = Fragata Sarmiento 12 (Aguas Verdes)
 const BRANCH_BY_CITY = {
-  'la lucila del mar': 1,
-  'san bernardo': 2, 'costa azul': 2, 'costa del este': 2, 'mar del tuyú': 2, 'mar del tuyu': 2, 'mar de ajó': 2, 'mar de ajo': 2,
-  'aguas verdes': 3, 'lucila del mar': 1,
+  'la lucila del mar': 1, 'lucila del mar': 1, 'costa azul': 1, 'costa del este': 1,
+  'san bernardo': 2, 'mar del tuyú': 2, 'mar del tuyu': 2, 'mar de ajó': 2, 'mar de ajo': 2,
+  'aguas verdes': 3,
 };
 // texto de la comodidad (BuscadorProp) -> key nuestra (worker/lib/amenities.ts)
 const AMEN_MAP = {
