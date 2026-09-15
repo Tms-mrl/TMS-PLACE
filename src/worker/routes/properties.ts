@@ -482,8 +482,10 @@ properties.get('/bookings', async (c) => {
   const m = Number(base.slice(5, 7));
   const first = `${base}-01`;
   const last = `${base}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
+  const branchId = num(c.req.query('branch'));
 
   const s = await scope(c, 'p');
+  const branchClause = branchId != null ? ' AND p.branch_id = ?' : '';
   const res = await c.env.DB
     .prepare(
       `SELECT b.id, b.property_id, p.title AS property_title, b.from_date, b.to_date,
@@ -492,10 +494,10 @@ properties.get('/bookings', async (c) => {
        JOIN properties p ON p.id = b.property_id
        LEFT JOIN clients cl ON cl.id = b.client_id AND cl.agency_id = ?
        WHERE ${s.where} AND b.kind = 'alquiler'
-         AND (b.from_date BETWEEN ? AND ? OR b.to_date BETWEEN ? AND ?)
+         AND (b.from_date BETWEEN ? AND ? OR b.to_date BETWEEN ? AND ?)${branchClause}
        ORDER BY p.title, b.from_date LIMIT 2000`,
     )
-    .bind(s.agencyId ?? -1, ...s.bind, first, last, first, last)
+    .bind(s.agencyId ?? -1, ...s.bind, first, last, first, last, ...(branchId != null ? [branchId] : []))
     .all();
   return c.json({ bookings: res.results });
 });

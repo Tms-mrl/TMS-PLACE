@@ -26,7 +26,7 @@ function buildDayMap(bookings: AgencyBooking[]): Map<string, DayInfo> {
   return map;
 }
 
-export function CalendarioPanel() {
+export function CalendarioPanel({ myBranchId }: { myBranchId: number | null }) {
   const now = new Date();
   const [ym, setYm] = useState({ y: now.getFullYear(), m: now.getMonth() });
   const [bookings, setBookings] = useState<AgencyBooking[]>([]);
@@ -36,12 +36,17 @@ export function CalendarioPanel() {
   const monthParam = `${ym.y}-${pad(ym.m + 1)}`;
   const load = (silent?: boolean) => {
     if (!silent) setLoaded(false);
-    return api<{ bookings: AgencyBooking[] }>(`/api/properties/bookings?month=${monthParam}`)
+    const params = new URLSearchParams({ month: monthParam });
+    if (myBranchId != null) params.set('branch', String(myBranchId));
+    return api<{ bookings: AgencyBooking[] }>(`/api/properties/bookings?${params}`)
       .then((r) => setBookings(r.bookings))
       .catch(() => { if (!silent) setBookings([]); })
       .finally(() => setLoaded(true));
   };
-  useEffect(() => { load(); }, [monthParam]);
+  // Atado a "Tu sucursal" (el selector del header, MyBranchSelector en agency-workspace.tsx)
+  // en vez de tener un filtro propio acá — decisión explícita del usuario 2026-09-15: no
+  // quería un desplegable nuevo, sino que el calendario reaccione al mismo que ya existía.
+  useEffect(() => { load(); }, [monthParam, myBranchId]);
   // Otra sucursal puede cargar un ingreso/desocupación en cualquier momento: sin esto no
   // se ve hasta recargar a mano. `silent` evita el parpadeo de "Cargando…" en cada tick;
   // si hay un día abierto (openDay), el detalle se recalcula solo vía dayMap (useMemo).

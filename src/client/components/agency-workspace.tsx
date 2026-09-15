@@ -124,7 +124,7 @@ export function AgencyWorkspace({ agency, user, onLogout, tab, setTab }: {
           />
         </div>
       )}
-      {visited.has('calendario') && <div hidden={tab !== 'calendario'}><CalendarioPanel /></div>}
+      {visited.has('calendario') && <div hidden={tab !== 'calendario'}><CalendarioPanel myBranchId={myBranchId} /></div>}
       {visited.has('sucursales') && <div hidden={tab !== 'sucursales'}><BranchesPanel branches={branches} summary={summary} onChanged={() => { loadMine(); loadSummary(); }} /></div>}
       {visited.has('equipo') && <div hidden={tab !== 'equipo'}><TeamPanel branches={branches} /></div>}
       {visited.has('configuracion') && <div hidden={tab !== 'configuracion'}><SettingsPanel user={user} onLogout={onLogout} agency={ag} onAgencySaved={loadMine} /></div>}

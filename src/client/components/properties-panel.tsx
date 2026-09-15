@@ -43,7 +43,7 @@ const fmtShort = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
 
 // Selector de rango de fechas por almanaque clickeable (mismo gesto que el CalendarModal
 // de reservas), para reemplazar el par de <input type=date> del filtro de Inventario.
-export function DateRangePicker({ from, to, onChange }: { from: string; to: string; onChange: (from: string, to: string) => void }) {
+export function DateRangePicker({ from, to, onChange, onDone }: { from: string; to: string; onChange: (from: string, to: string) => void; onDone?: () => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const now = new Date();
@@ -98,7 +98,7 @@ export function DateRangePicker({ from, to, onChange }: { from: string; to: stri
           </div>
           <div className="row" style={{ justifyContent: 'space-between', marginTop: 10 }}>
             <button type="button" className="link-btn" onClick={() => onChange('', '')}>Limpiar</button>
-            <Button size="sm" onClick={() => setOpen(false)}>Listo</Button>
+            <Button size="sm" onClick={() => { setOpen(false); onDone?.(); }}>Listo</Button>
           </div>
         </div>
       )}
@@ -449,7 +449,7 @@ export function PropertiesPanel({ branches, onChanged, preset, mailAttach, onSen
           </SelectContent>
         </Select>
         <input type="number" min={1} placeholder="Pers." title="Ordena por capacidad: primero las de esa cantidad y las más grandes. No oculta ninguna." value={f.capacity} onChange={(e) => set('capacity', e.target.value)} style={{ maxWidth: 74 }} />
-        <DateRangePicker from={f.dateFrom} to={f.dateTo} onChange={(dateFrom, dateTo) => setF((s) => ({ ...s, dateFrom, dateTo }))} />
+        <DateRangePicker from={f.dateFrom} to={f.dateTo} onChange={(dateFrom, dateTo) => setF((s) => ({ ...s, dateFrom, dateTo }))} onDone={load} />
       </div>
       <div className={selected.size > 0 ? 'bulk-bar-wrap open' : 'bulk-bar-wrap'}>
         <div className="bulk-bar-inner">
