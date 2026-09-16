@@ -497,6 +497,11 @@ input, select, textarea { color: var(--fg); }
 /* Formularios en 2 columnas + campos con label */
 .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .fld { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
+/* Sin esto el input/textarea queda con el reset de Tailwind (borde 0) — se
+   confunde con el fondo del modal porque --bg y --panel son casi el mismo tono. */
+.fld input, .fld select, .fld textarea {
+  padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font: inherit; font-size: 15px; width: 100%;
+}
 .chk { display: flex; align-items: center; gap: 7px; font-size: 14px; }
 @media (max-width: 480px) { .row2 { grid-template-columns: 1fr; } }
 
