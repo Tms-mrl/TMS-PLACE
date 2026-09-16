@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Calendar as CalendarIcon, ChevronLeft, ChevronRight, Download, EyeOff,
+  Calendar as CalendarIcon, ChevronLeft, ChevronRight, EyeOff,
   Mail, Search, Share2, Tag, X,
 } from 'lucide-react';
 import { api } from '../lib/api';
@@ -12,7 +12,7 @@ import { toast } from '../lib/toast';
 import { prefetchClients } from '../lib/clients-cache';
 import { usePoll } from '../lib/use-poll';
 import { CalendarModal } from './calendar-modal';
-import { AskModal, PhotoManager, PropertyForm } from './property-form';
+import { PhotoManager, PropertyForm } from './property-form';
 import { PropertyRow } from './property-row';
 import { SeasonPricesModal } from './season-prices-modal';
 import { StatsModal } from './stats-modal';
@@ -108,29 +108,6 @@ export function DateRangePicker({ from, to, onChange, onDone }: { from: string; 
 
 /** Filtro preseteado desde los KPIs del Resumen. */
 export type PropPreset = { status?: string; branch?: number; op?: string; published?: string };
-
-// Importar una propiedad desde un link de Argenprop (extrae datos + fotos).
-export function ImportArgenprop({ scope, onImported }: { scope: 'agency' | 'particular'; onImported: () => void }) {
-  const [busy, setBusy] = useState(false);
-  const [open, setOpen] = useState(false);
-  async function run(url: string) {
-    setOpen(false); setBusy(true);
-    try {
-      const r = await api<{ imported: { photos: number } }>('/api/properties/import', { method: 'POST', body: JSON.stringify({ url, scope }) });
-      toast(`Importada con ${r.imported.photos} foto(s). Quedó como borrador — revisala y publicala.`, 'ok');
-      onImported();
-    } catch (e) { toast(String((e as Error).message), 'err'); }
-    finally { setBusy(false); }
-  }
-  return (
-    <>
-      <Button variant="outline" onClick={() => setOpen(true)} disabled={busy}>
-        <Download className="h-4 w-4" />{busy ? 'Importando…' : 'Importar de Argenprop'}
-      </Button>
-      {open && <AskModal title="Importar de Argenprop" label="Pegá el link de la propiedad en Argenprop." placeholder="https://www.argenprop.com/..." cta="Importar" onSubmit={run} onClose={() => setOpen(false)} />}
-    </>
-  );
-}
 
 // Visor de fotos a pantalla completa.
 function Lightbox({ media, onClose }: { media: Media[]; onClose: () => void }) {
@@ -361,7 +338,6 @@ export function PropertiesPanel({ branches, onChanged, preset, mailAttach, onSen
           <p className="muted small">{props.length} propiedad{props.length === 1 ? '' : 'es'} cargada{props.length === 1 ? '' : 's'}</p>
         </div>
         <div className="row" style={{ gap: 8 }}>
-          <ImportArgenprop scope="agency" onImported={reload} />
           <Button onClick={() => setShowNew(true)}>Nueva propiedad</Button>
         </div>
       </div>
