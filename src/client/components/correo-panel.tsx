@@ -41,8 +41,9 @@ const fmt = (iso: string | null) => (iso ? new Date(`${iso.replace(' ', 'T')}Z`)
 
 export function CorreoPanel({ branches, myBranchId, onStartAttach, attachResult, onConsumeAttachResult }: {
   branches: Branch[]; myBranchId: number | null;
-  /** "Adjuntar propiedades" (en el hilo abierto) salta al Inventario completo en vez de
-   *  un picker aparte — ver PropertiesPanel `mailAttach`/`onSendToMail` en agency-workspace.tsx. */
+  /** "Adjuntar propiedades" (al responder un hilo o al redactar uno nuevo) salta al
+   *  Inventario completo en vez de un picker aparte — ver PropertiesPanel
+   *  `mailAttach`/`onSendToMail` en agency-workspace.tsx. */
   onStartAttach: () => void; attachResult: Property[] | null; onConsumeAttachResult: () => void;
 }) {
   const [status, setStatus] = useState<MailStatus | null>(null);
@@ -199,26 +200,49 @@ export function CorreoPanel({ branches, myBranchId, onStartAttach, attachResult,
         <ComposeModal
           onClose={() => setComposing(false)}
           onSent={(thread) => { setComposing(false); setThreads((ts) => [thread, ...ts]); setOpenId(thread.id); }}
+          onStartAttach={onStartAttach}
+          attachResult={attachResult}
+          onConsumeAttachResult={onConsumeAttachResult}
         />
       )}
     </div>
   );
 }
 
-function ComposeModal({ onClose, onSent }: { onClose: () => void; onSent: (thread: MailThread) => void }) {
+function ComposeModal({ onClose, onSent, onStartAttach, attachResult, onConsumeAttachResult }: {
+  onClose: () => void; onSent: (thread: MailThread) => void;
+  onStartAttach: () => void; attachResult: Property[] | null; onConsumeAttachResult: () => void;
+}) {
   const [to, setTo] = useState('');
   const [subject, setSubject] = useState('');
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
+  const [attached, setAttached] = useState<Property[]>([]);
+  const [dFrom, setDFrom] = useState('');
+  const [dTo, setDTo] = useState('');
+
+  // Vuelta del Inventario con propiedades elegidas — mismo mecanismo que "Adjuntar
+  // propiedades" al responder un hilo (ver ThreadDetail): se suman a lo ya adjunto.
+  useEffect(() => {
+    if (!attachResult) return;
+    setAttached((prev) => {
+      const have = new Set(prev.map((p) => p.id));
+      return [...prev, ...attachResult.filter((p) => !have.has(p.id))];
+    });
+    onConsumeAttachResult();
+  }, [attachResult]);
+
+  const attachedBlock = attached.length ? shareBlocks(attached, dFrom, dTo) : '';
+  const fullBody = [text.trim(), attachedBlock].filter(Boolean).join('\n\n');
 
   async function send() {
     if (!to.trim()) return toast('Falta la dirección de destino', 'err');
-    if (!text.trim()) return toast('Escribí un mensaje', 'err');
+    if (!fullBody.trim()) return toast('Escribí un mensaje o adjuntá una propiedad', 'err');
     setSending(true);
     try {
       const r = await api<{ thread: MailThread }>('/api/correo/compose', {
         method: 'POST',
-        body: JSON.stringify({ to: to.trim(), subject: subject.trim(), body: text }),
+        body: JSON.stringify({ to: to.trim(), subject: subject.trim(), body: fullBody }),
       });
       toast('Mensaje enviado', 'ok');
       onSent(r.thread);
@@ -234,6 +258,21 @@ function ComposeModal({ onClose, onSent }: { onClose: () => void; onSent: (threa
         <span className="fld-lbl">Mensaje</span>
         <textarea rows={8} placeholder="Escribí el mensaje…" value={text} onChange={(e) => setText(e.target.value)} />
       </label>
+      <div className="row" style={{ gap: 10, marginTop: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        <Button variant="outline" size="sm" onClick={onStartAttach} title="Te lleva al Inventario para elegir">
+          <Paperclip className="h-4 w-4" />Adjuntar propiedades{attached.length ? ` (${attached.length})` : ''}
+        </Button>
+        {attached.length > 0 && <DateRangePicker from={dFrom} to={dTo} onChange={(f, t) => { setDFrom(f); setDTo(t); }} />}
+        {attached.length > 0 && (
+          <button type="button" className="link-btn" onClick={() => { setAttached([]); setDFrom(''); setDTo(''); }}>Quitar todas</button>
+        )}
+      </div>
+      {attachedBlock && (
+        <div className="mail-preview">
+          <div className="muted small">Así se ve lo adjuntado:</div>
+          <pre>{attachedBlock}</pre>
+        </div>
+      )}
       <Button style={{ marginTop: 12 }} onClick={send} disabled={sending}>{sending ? 'Enviando…' : 'Enviar'}</Button>
     </Modal>
   );
