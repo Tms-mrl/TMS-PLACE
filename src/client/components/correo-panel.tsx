@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ChevronDown, ChevronRight, Mail, Paperclip, Pencil, Reply, RefreshCw } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronRight, Mail, Paperclip, Pencil, RefreshCw } from 'lucide-react';
 import { api } from '../lib/api';
 import { toast } from '../lib/toast';
 import type { Branch, MailMessage, MailStatus, MailThread, Property } from '../lib/types';
@@ -440,7 +440,7 @@ function ThreadDetail({ id, branches, onBack, onStartAttach, attachResult, onCon
         title="Ir a responder"
         onClick={() => replyBoxRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
       >
-        <Reply className="h-5 w-5" />
+        <Mail className="h-5 w-5" />
       </button>
     </div>
   );
