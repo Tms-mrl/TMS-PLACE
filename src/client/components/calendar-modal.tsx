@@ -263,10 +263,6 @@ export function CalendarModal({ property, onClose }: { property: Property; onClo
                 ? <>Desde <b>{fmtDay(f.from)}</b> — tocá el día de salida.</>
                 : 'Tocá un día para el "desde" y otro para el "hasta".'}
           </p>
-          <div className="row2">
-            <label className="date-lbl">Desde<input type="date" value={f.from} onChange={(e) => setF((s) => ({ ...s, from: e.target.value }))} /></label>
-            <label className="date-lbl">Hasta<input type="date" value={f.to} onChange={(e) => setF((s) => ({ ...s, to: e.target.value }))} /></label>
-          </div>
           <Select value={f.kind} onValueChange={(v) => setF((s) => ({ ...s, kind: v }))}>
             <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
             <SelectContent>{BOOKING_KINDS.map((k) => <SelectItem key={k} value={k}>{KIND_LABEL[k]}</SelectItem>)}</SelectContent>
