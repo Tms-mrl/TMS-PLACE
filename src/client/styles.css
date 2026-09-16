@@ -819,13 +819,9 @@ input, select, textarea { color: var(--fg); }
 .pchip-flag { font-weight: 600; }
 .pchip-flag.is-warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); background: color-mix(in srgb, var(--warn) 12%, var(--panel)); }
 .pchip-flag.is-mute { color: var(--muted); }
-.prow-modified { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
-
 .prow-money { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; text-align: right; }
-.prow-op { font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
 .prow-price { font-size: 18px; line-height: 1.2; color: var(--forest); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .prow-period { font-size: 12px; color: var(--muted); }
-.prow-branch { margin-top: 4px; padding: 2px 8px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); font-size: 11px; color: var(--muted); }
 
 /* Botones y menus de la fila */
 .prow-actions { display: flex; flex-direction: column; gap: 6px; }
@@ -885,7 +881,6 @@ input, select, textarea { color: var(--fg); }
   .prow { grid-template-columns: auto 120px minmax(0, 1fr); gap: 10px; padding: 12px; }
   .prow-thumb { width: 120px; height: 90px; }
   .prow-money { grid-column: 2 / -1; flex-direction: row; align-items: baseline; justify-content: flex-start; gap: 8px; text-align: left; flex-wrap: wrap; }
-  .prow-money .prow-branch { margin-top: 0; }
   .prow-actions { grid-column: 2 / -1; flex-direction: row; flex-wrap: wrap; }
   .prow-actions > * { flex: 1 1 auto; }
   /* "Editar" pasa al menú en mobile: menos botones apilados, foto más grande. */

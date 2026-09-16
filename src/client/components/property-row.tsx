@@ -7,6 +7,7 @@ import {
 import { api } from '../lib/api';
 import { cn } from '../lib/cn';
 import { mediaUrl, money, PERIOD_SUFFIX, type Property } from '../lib/types';
+import { quoteForRange } from '../lib/season-price';
 import { AMENITIES, parseAmenities } from '../lib/amenities';
 import { completeness, completenessHint, completenessTone } from '../lib/completeness';
 import { toast } from '../lib/toast';
@@ -24,17 +25,6 @@ const STATUS_COLOR: Record<string, string> = {
 /** Etiqueta de solo lectura: el estado se calcula desde el calendario, no se elige. */
 export function StatusChip({ status }: { status: string }) {
   return <span className={cn('pchip pchip-status', STATUS_COLOR[status])}>{status}</span>;
-}
-
-const OP_LABEL: Record<string, string> = { alquiler: 'Alquiler', venta: 'Venta', temporario: 'Temporario' };
-
-/** "06/04/2026 16:52" — el ISO es formato de máquina, no de pantalla. */
-function fmtDateTime(iso: string | null | undefined): string {
-  if (!iso) return '—';
-  const d = new Date(iso.includes('T') ? iso : iso.replace(' ', 'T') + 'Z');
-  if (Number.isNaN(d.getTime())) return iso;
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
 // ── Menú desplegable de la fila ──────────────────────────────────────────────
@@ -73,12 +63,16 @@ function MenuItem({ icon, children, onClick, danger, className }: { icon: ReactN
 // ── La fila ──────────────────────────────────────────────────────────────────
 // UNA sola versión para escritorio y celular: el layout es grid y se reacomoda por CSS.
 // Antes había dos componentes (tabla + card mobile) con las mismas acciones duplicadas.
-export function PropertyRow({ p, index, expanded, checked, selectMode, selectedCount, mailAttach, onSelect, onToggle, onManage, onEdit, onCalendar, onSeasonPrices, onShare, onShareAll, onLightbox, onStats, onReload }: {
+export function PropertyRow({ p, index, expanded, checked, selectMode, selectedCount, mailAttach, dateFrom, dateTo, onSelect, onToggle, onManage, onEdit, onCalendar, onSeasonPrices, onShare, onShareAll, onLightbox, onStats, onReload }: {
   p: Property; index: number; expanded: boolean; checked: boolean; selectMode: boolean; selectedCount: number;
   /** Modo "elegir para adjuntar a un correo" (ver PropertiesPanel `mailAttach`): cambia
    *  el botón "Compartir por WhatsApp" por "Enviar por correo" — mismo onShare/onShareAll,
    *  el padre les pasa una función distinta según el modo. */
   mailAttach: boolean;
+  /** Filtro "Desde/Hasta" del panel (mismo `dFrom`/`dTo` que ya usa para ordenar por
+   *  precio y armar "Compartir"): con fechas cargadas, la tarjeta cotiza el precio por
+   *  temporada para ese rango en vez de mostrar el precio fijo. `''` = sin filtro. */
+  dateFrom: string; dateTo: string;
   onSelect: () => void; onToggle: () => void;
   onManage: () => void; onEdit: () => void; onCalendar: () => void; onSeasonPrices: () => void; onShare: () => void; onShareAll: () => void; onLightbox: (p: Property) => void; onStats: () => void; onReload: () => void;
 }) {
@@ -123,6 +117,11 @@ export function PropertyRow({ p, index, expanded, checked, selectMode, selectedC
     p.capacity ? { k: 'cap', n: String(p.capacity), lbl: 'personas', ic: <Users className="h-3.5 w-3.5" /> } : null,
     p.area_m2 ? { k: 'area', n: `${p.area_m2} m²`, lbl: 'superficie', ic: <Ruler className="h-3.5 w-3.5" /> } : null,
   ].filter(Boolean) as { k: string; n: string; lbl: string; ic: ReactNode }[];
+
+  // Precio por temporada para el rango filtrado (mismo cálculo que `sortPrice` en
+  // PropertiesPanel); sin filtro de fechas, o sin esa tarifa cargada, cae al fijo.
+  const quoted = dateFrom ? quoteForRange(p.season_prices, dateFrom, dateTo) : null;
+  const displayPrice = quoted ?? p.price ?? null;
 
   // En "modo selección" (ya hay al menos una marcada), tocar cualquier parte de la fila
   // que no sea un control (botón / link / el propio check / el menú) marca o desmarca —
@@ -174,17 +173,16 @@ export function PropertyRow({ p, index, expanded, checked, selectMode, selectedC
               {s.ic}{s.n}<span className="sr">{s.lbl}</span>
             </span>
           ))}
-          <span className="pchip pchip-soft" title="Visitas al aviso"><Eye className="h-3 w-3" />{p.views ?? 0}</span>
         </div>
-
-        <div className="prow-modified">Últ. modificación: {fmtDateTime(p.updated_at || p.created_at)}</div>
       </div>
 
       <div className="prow-money">
-        <span className="prow-op">{OP_LABEL[p.operation] || p.operation}</span>
-        <b className="prow-price">{money(p.price, p.currency, null)}</b>
-        {p.price != null && PERIOD_SUFFIX[p.price_period || ''] && <span className="prow-period">{PERIOD_SUFFIX[p.price_period || '']}</span>}
-        {p.branch_name && <span className="prow-branch">{p.branch_name}</span>}
+        {displayPrice != null && (
+          <>
+            <b className="prow-price">{money(displayPrice, p.currency, null)}</b>
+            {quoted == null && PERIOD_SUFFIX[p.price_period || ''] && <span className="prow-period">{PERIOD_SUFFIX[p.price_period || '']}</span>}
+          </>
+        )}
       </div>
 
       <div className="prow-actions">

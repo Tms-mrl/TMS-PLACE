@@ -511,7 +511,7 @@ export function PropertiesPanel({ branches, onChanged, preset, mailAttach, onSen
       ) : (
         <div className="plist">
           {pageRows.map((p, i) => (
-            <PropertyRow key={p.id} p={p} index={i} expanded={expanded === p.id}
+            <PropertyRow key={p.id} p={p} index={i} expanded={expanded === p.id} dateFrom={dFrom} dateTo={dTo}
               checked={selected.has(p.id)} selectMode={selected.size > 0} selectedCount={selected.size} mailAttach={!!mailAttach} onSelect={() => toggleSel(p.id)}
               onToggle={() => setExpanded((e) => (e === p.id ? null : p.id))}
               onManage={() => setManaging(p)} onEdit={() => setEditing(p)} onCalendar={() => setCal(p)}
