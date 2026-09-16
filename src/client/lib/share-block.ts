@@ -11,15 +11,15 @@ import type { Property } from './types';
 
 type ShareableProperty = Pick<Property, 'title' | 'address' | 'city' | 'external_url' | 'season_prices'>;
 
-/** "día 1 al 11" (mismo mes) o "día 28/1 al 3/2" (cruza de mes). `to` ya viene resuelto
- *  (= from si es un solo día). Devuelve solo "día N" si el rango es de un único día. */
+/** "Del 1/1 al 5/1" — siempre con el mes al lado del día, mismo mes o cruzando de mes
+ *  (ej. "Del 28/1 al 3/2"). `to` ya viene resuelto (= from si es un solo día). Devuelve
+ *  "El D/M" si el rango es de un único día. */
 function dayRangeLabel(from: string, to: string): string {
   const start = new Date(`${from}T00:00:00`);
   const end = new Date(`${to}T00:00:00`);
-  const sameMonth = start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth();
-  const d1 = sameMonth ? `${start.getDate()}` : `${start.getDate()}/${start.getMonth() + 1}`;
-  const d2 = sameMonth ? `${end.getDate()}` : `${end.getDate()}/${end.getMonth() + 1}`;
-  return d1 === d2 ? `día ${d1}` : `día ${d1} al ${d2}`;
+  const d1 = `${start.getDate()}/${start.getMonth() + 1}`;
+  const d2 = `${end.getDate()}/${end.getMonth() + 1}`;
+  return d1 === d2 ? `El ${d1}` : `Del ${d1} al ${d2}`;
 }
 
 /** Redondeo "lindo" para el precio del mensaje (acordado con el usuario, 2026-09-14):
