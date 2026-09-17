@@ -55,6 +55,13 @@ export function CorreoPanel({ branches, myBranchId, onStartAttach, attachResult,
   const [syncing, setSyncing] = useState(false);
   const [composing, setComposing] = useState(false);
   const autoSynced = useRef(false);
+  // Precarga en 2º plano: guarda el contenido ya resuelto de Gmail de los primeros
+  // hilos de la lista, así abrirlos se siente instantáneo en vez de esperar el viaje
+  // a Gmail recién al hacer click (ver ThreadDetail.load, que mira acá primero).
+  // `peek=1` trae lo mismo que abrir de verdad pero no lo marca leído — eso recién
+  // pasa si el usuario lo abre de verdad.
+  const threadCache = useRef(new Map<number, { thread: MailThread; messages: MailMessage[] }>());
+  const prefetching = useRef(false);
 
   const loadStatus = () => api<MailStatus>('/api/correo/status').then(setStatus).catch(() => {});
   const loadThreads = () => {
@@ -87,11 +94,33 @@ export function CorreoPanel({ branches, myBranchId, onStartAttach, attachResult,
   // otro componente con su propio estado; no le toca el borrador de respuesta).
   usePoll(() => { if (status?.connected) { loadThreads(); loadStatus(); } }, 6 * 60_000);
 
+  // De a uno y con una pausa entre cada uno (no en paralelo) para no ráfaguear la API
+  // de Gmail ni competir por ancho de banda con lo que el usuario esté mirando. Si
+  // `threads` cambia (recarga, poll, marcar leído) se vuelve a evaluar, pero los ids
+  // ya cacheados se saltan al toque — es idempotente, no repite trabajo.
+  useEffect(() => {
+    if (prefetching.current) return;
+    const ids = threads.slice(0, 10).map((t) => t.id).filter((id) => id !== openId && !threadCache.current.has(id));
+    if (!ids.length) return;
+    prefetching.current = true;
+    (async () => {
+      for (const id of ids) {
+        try {
+          const r = await api<{ thread: MailThread; messages: MailMessage[] }>(`/api/correo/threads/${id}?peek=1`);
+          threadCache.current.set(id, { thread: r.thread, messages: r.messages });
+        } catch { /* uno que falla no corta la precarga del resto */ }
+        await new Promise((res) => setTimeout(res, 350));
+      }
+      prefetching.current = false;
+    })();
+  }, [threads, openId]);
+
   if (openId != null) {
     return (
       <ThreadDetail
         id={openId}
         branches={branches}
+        cache={threadCache.current}
         onBack={() => { setOpenId(null); loadThreads(); loadStatus(); }}
         onStartAttach={onStartAttach}
         attachResult={attachResult}
@@ -323,8 +352,12 @@ function HtmlMail({ html }: { html: string }) {
   );
 }
 
-function ThreadDetail({ id, branches, onBack, onStartAttach, attachResult, onConsumeAttachResult }: {
-  id: number; branches: Branch[]; onBack: () => void;
+function ThreadDetail({ id, branches, cache, onBack, onStartAttach, attachResult, onConsumeAttachResult }: {
+  id: number; branches: Branch[];
+  /** Caché de hilos ya resueltos (ver CorreoPanel), precargados en 2º plano o de una
+   *  apertura anterior en esta misma sesión — abrir uno que ya está acá es instantáneo. */
+  cache: Map<number, { thread: MailThread; messages: MailMessage[] }>;
+  onBack: () => void;
   onStartAttach: () => void; attachResult: Property[] | null; onConsumeAttachResult: () => void;
 }) {
   const [thread, setThread] = useState<MailThread | null>(null);
@@ -348,8 +381,21 @@ function ThreadDetail({ id, branches, onBack, onStartAttach, attachResult, onCon
 
   const load = () => {
     setErr('');
+    const cached = cache.get(id);
+    if (cached) {
+      // Ya lo teníamos (precargado o de una apertura anterior): se pinta al toque.
+      // Si seguía sin leer, marcarlo leído es un PATCH liviano (no vuelve a pedirle
+      // el hilo a Gmail) — ver peek=1 en el GET, que es lo que llena esta caché.
+      setThread(cached.thread); setMessages(cached.messages);
+      if (cached.thread.unread) {
+        api<{ thread: MailThread }>(`/api/correo/threads/${id}`, { method: 'PATCH', body: JSON.stringify({ unread: 0 }) })
+          .then((r) => { setThread(r.thread); cache.set(id, { thread: r.thread, messages: cached.messages }); })
+          .catch(() => {});
+      }
+      return;
+    }
     api<{ thread: MailThread; messages: MailMessage[] }>(`/api/correo/threads/${id}`)
-      .then((r) => { setThread(r.thread); setMessages(r.messages); })
+      .then((r) => { setThread(r.thread); setMessages(r.messages); cache.set(id, { thread: r.thread, messages: r.messages }); })
       .catch((e) => setErr(String((e as Error).message)));
   };
   useEffect(() => { load(); }, [id]);
@@ -370,6 +416,9 @@ function ThreadDetail({ id, branches, onBack, onStartAttach, attachResult, onCon
     try {
       const r = await api<{ thread: MailThread }>(`/api/correo/threads/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
       setThread(r.thread);
+      // Los mensajes no cambian con un PATCH (sucursal/estado) — solo se actualiza el
+      // thread cacheado, para que reabrirlo no muestre la sucursal/estado viejos.
+      cache.set(id, { thread: r.thread, messages: cache.get(id)?.messages ?? messages ?? [] });
     } catch (e) { toast(String((e as Error).message), 'err'); }
   }
 
@@ -383,6 +432,9 @@ function ThreadDetail({ id, branches, onBack, onStartAttach, attachResult, onCon
       const r = await api<{ thread: MailThread }>(`/api/correo/threads/${id}/reply`, { method: 'POST', body: JSON.stringify({ body: fullBody }) });
       setThread(r.thread);
       setReplyText(''); setAttached([]); setDFrom(''); setDTo('');
+      // Se cacheó sin la respuesta que se acaba de mandar — se descarta para que la
+      // próxima vez que se abra este hilo lo traiga entero de nuevo, no una versión vieja.
+      cache.delete(id);
       toast('Respuesta enviada', 'ok');
     } catch (e) { toast(String((e as Error).message), 'err'); }
     finally { setSending(false); }

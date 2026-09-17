@@ -34,6 +34,7 @@ export function StatusChip({ status }: { status: string }) {
 function RowMenu({ label, icon, children }: { label: string; icon: ReactNode; children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
@@ -42,12 +43,20 @@ function RowMenu({ label, icon, children }: { label: string; icon: ReactNode; ch
     document.addEventListener('keydown', onKey);
     return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
   }, [open]);
+  // En la última fila el menú puede quedar cortado por el borde de la ventana — sin
+  // esto hay que scrollear la página a mano para ver las últimas opciones, y ese
+  // scroll (con la barra lateral, ej. en trackpad/pad sin mouse) cuenta como "click
+  // afuera" para el handler de arriba, así que el menú se cierra solo. Autoscrollear
+  // lo justo al abrir (scrollIntoView no dispara mousedown) evita esa carrera.
+  useEffect(() => {
+    if (open) popRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [open]);
   return (
     <div className="rmenu" ref={ref}>
       <button type="button" className={cn('rbtn', open && 'is-open')} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
         {icon}<span>{label}</span><ChevronDown className="rbtn-caret" />
       </button>
-      {open && <div className="rmenu-pop" role="menu" onClick={() => setOpen(false)}>{children}</div>}
+      {open && <div className="rmenu-pop" role="menu" ref={popRef} onClick={() => setOpen(false)}>{children}</div>}
     </div>
   );
 }

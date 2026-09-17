@@ -174,6 +174,10 @@ correo.get('/threads/:id', async (c) => {
   if (!mine) return forbidden(c, 'Sin acceso');
   const id = num(c.req.param('id'));
   if (id == null) return bad(c, 'id inválido');
+  // "peek=1": lo usa el prefetch en segundo plano del cliente (precarga los primeros
+  // hilos de la lista para que abrirlos se sienta instantáneo) — trae el contenido
+  // igual que una apertura real, pero no cuenta como que alguien lo leyó.
+  const peek = c.req.query('peek') === '1';
   const row = await c.env.DB.prepare(threadSelect('WHERE t.id = ?')).bind(id).first<MailThreadRow & { branch_name: string | null }>();
   if (!row) return notFound(c, 'Hilo no encontrado');
   try {
@@ -188,7 +192,7 @@ correo.get('/threads/:id', async (c) => {
     }));
     // Abrir el hilo = marcarlo leído (como Gmail). Si falla el fetch de arriba no
     // llegamos acá, así que un hilo que no se pudo traer no queda falsamente leído.
-    if (row.unread) {
+    if (row.unread && !peek) {
       await c.env.DB.prepare('UPDATE mail_threads SET unread = 0 WHERE id = ?').bind(id).run();
       row.unread = 0;
     }
@@ -234,6 +238,12 @@ correo.patch('/threads/:id', async (c) => {
     if (!STATUSES.includes(status)) return bad(c, 'status inválido');
     sets.push('status = ?');
     binds.push(status);
+  }
+  // Marcar leído/no leído sin volver a pedirle el hilo a Gmail — lo usa el cliente al
+  // abrir un hilo que ya tenía precargado en caché (ver GET /threads/:id?peek=1).
+  if ('unread' in body) {
+    sets.push('unread = ?');
+    binds.push(body.unread ? 1 : 0);
   }
   if (!sets.length) return bad(c, 'Nada para actualizar');
   sets.push("updated_at = datetime('now')");

@@ -485,17 +485,28 @@ export function PropertiesPanel({ branches, onChanged, preset, mailAttach, onSen
       {displayRows.length === 0 ? (
         <p className="pempty">No hay propiedades con esos filtros.</p>
       ) : (
-        <div className="plist">
-          {pageRows.map((p, i) => (
-            <PropertyRow key={p.id} p={p} index={i} expanded={expanded === p.id} dateFrom={dFrom} dateTo={dTo}
-              checked={selected.has(p.id)} selectMode={selected.size > 0} selectedCount={selected.size} mailAttach={!!mailAttach} onSelect={() => toggleSel(p.id)}
-              onToggle={() => setExpanded((e) => (e === p.id ? null : p.id))}
-              onManage={() => setManaging(p)} onEdit={() => setEditing(p)} onCalendar={() => setCal(p)}
-              onSeasonPrices={() => setSeasonP(p)}
-              onShare={() => (mailAttach ? sendToMail([p]) : shareProps([p]))} onShareAll={mailAttach ? bulkSendToMail : bulkShare}
-              onLightbox={openLightbox} onStats={() => setStats(p)} onReload={reload} />
-          ))}
-        </div>
+        <>
+          <div className="plist">
+            {pageRows.map((p, i) => (
+              <PropertyRow key={p.id} p={p} index={i} expanded={expanded === p.id} dateFrom={dFrom} dateTo={dTo}
+                checked={selected.has(p.id)} selectMode={selected.size > 0} selectedCount={selected.size} mailAttach={!!mailAttach} onSelect={() => toggleSel(p.id)}
+                onToggle={() => setExpanded((e) => (e === p.id ? null : p.id))}
+                onManage={() => setManaging(p)} onEdit={() => setEditing(p)} onCalendar={() => setCal(p)}
+                onSeasonPrices={() => setSeasonP(p)}
+                onShare={() => (mailAttach ? sendToMail([p]) : shareProps([p]))} onShareAll={mailAttach ? bulkSendToMail : bulkShare}
+                onLightbox={openLightbox} onStats={() => setStats(p)} onReload={reload} />
+            ))}
+          </div>
+          {/* Misma paginación de arriba, repetida abajo de la lista — si scrolleaste
+              hasta el final, pasar de página no debería obligarte a subir de nuevo. */}
+          <div className="pbar" style={{ marginTop: 14, marginBottom: 0 }}>
+            <div className="ppager">
+              <span className="ppager-count">{shownFrom}-{shownTo} de {displayRows.length}</span>
+              <button type="button" className="ppager-btn" onClick={() => setPage((n) => Math.max(0, n - 1))} disabled={safePage === 0} aria-label="Página anterior"><ChevronLeft className="h-4 w-4" /></button>
+              <button type="button" className="ppager-btn" onClick={() => setPage((n) => Math.min(pages - 1, n + 1))} disabled={safePage >= pages - 1} aria-label="Página siguiente"><ChevronRight className="h-4 w-4" /></button>
+            </div>
+          </div>
+        </>
       )}
       {showNew && <PropertyForm scope="agency" branches={branches} onClose={() => setShowNew(false)} onSaved={reload} />}
       {editing && <PropertyForm scope="agency" branches={branches} edit={editing} onClose={() => setEditing(null)} onSaved={reload} />}
