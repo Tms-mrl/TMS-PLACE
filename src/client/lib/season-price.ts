@@ -18,12 +18,16 @@ export function rangeNights(from: string, to: string): number | null {
  * /mine). Devuelve el monto en ARS, o `null` si no se puede calcular: sin fecha `from`,
  * sin tarifa para ese mes, o sin precio cargado en el tramo que corresponde.
  *
- * Reglas (acordadas con el usuario, 2026-09-08; prorrateo de semana sumado 2026-09-11):
+ * Reglas (acordadas con el usuario, 2026-09-08; prorrateo de semana sumado 2026-09-11;
+ * mes completo → price_month sumado 2026-09-18):
  *  - N = días del rango contados inclusive → "del 1 al 4" = 4.
  *  - Mes = el de la fecha de inicio. Quincena: 1ª = días 1-15, 2ª = 16-fin. Si el rango
  *    cruza la mitad de mes, se usa la 2ª quincena cuando le caen 3 días o más.
- *  - Tramo por bloques: N ≤ 6 → precio por día × N · 7 ≤ N ≤ 13 → precio semana ÷ 7 × N
- *    (prorrateado) · N ≥ 14 → precio quincena (fijo).
+ *  - Del día 1 al último del mes (mismo mes): precio de mes fijo (`price_month`), si
+ *    está cargado — sin esto, un mes de 30/31 días caía en la regla de abajo (N ≥ 14)
+ *    y devolvía la tarifa de la 2ª quincena, no la del mes entero.
+ *  - Tramo por bloques (el resto de los casos): N ≤ 6 → precio por día × N · 7 ≤ N ≤ 13
+ *    → precio semana ÷ 7 × N (prorrateado) · N ≥ 14 → precio quincena (fijo).
  */
 export function quoteForRange(seasonJson: string | null | undefined, from: string, to: string): number | null {
   if (!from) return null;
@@ -37,6 +41,11 @@ export function quoteForRange(seasonJson: string | null | undefined, from: strin
   const end = new Date(`${to || from}T00:00:00`);
   const row = rows.find((r) => r.month === start.getMonth() + 1);
   if (!row) return null;
+
+  const lastDay = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
+  const isFullMonth = start.getDate() === 1 && end.getDate() === lastDay
+    && end.getMonth() === start.getMonth() && end.getFullYear() === start.getFullYear();
+  if (isFullMonth && row.price_month != null) return row.price_month;
 
   let daysInQ2 = 0;
   for (let t = start.getTime(); t <= end.getTime(); t += DAY_MS) {
