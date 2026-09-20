@@ -8,6 +8,7 @@ import { api } from '../lib/api';
 import { cn } from '../lib/cn';
 import { mediaUrl, money, PERIOD_SUFFIX, type Property } from '../lib/types';
 import { quoteForRange } from '../lib/season-price';
+import { publicLink } from '../lib/share-block';
 import { AMENITIES, parseAmenities } from '../lib/amenities';
 import { completeness, completenessHint, completenessTone } from '../lib/completeness';
 import { toast } from '../lib/toast';
@@ -112,7 +113,7 @@ export function PropertyRow({ p, index, expanded, checked, selectMode, selectedC
   }
   function copyLink() {
     if (!p.external_url) { toast('Esta propiedad no tiene link del aviso — cargalo en Editar', 'err'); return; }
-    navigator.clipboard?.writeText(p.external_url).then(
+    navigator.clipboard?.writeText(publicLink(p.external_url)).then(
       () => toast('Link copiado ✓', 'ok'),
       () => toast('No se pudo copiar', 'err'),
     );

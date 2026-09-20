@@ -285,8 +285,8 @@ properties.delete('/:id', async (c) => {
 
 // Duplicar una propiedad (datos + fotos + propietario + precios por temporada). El título
 // de la copia queda como "<título> copia 1"; la próxima copia de esa familia es "copia 2",
-// "copia 3", etc. Respeta el estado de publicación de la original; nace sin reservas, sin
-// link de aviso (external_url es único) y con estado 'disponible'. Las fotos NO se
+// "copia 3", etc. Respeta el estado de publicación de la original; nace sin reservas y con
+// estado 'disponible'. El link del aviso se copia como "<link>#copia-N" (es único). Las fotos NO se
 // duplican en R2: las filas nuevas apuntan a las MISMAS keys (se comparte el binario para
 // ahorrar espacio; el borrado de foto ya está referenciado, ver DELETE /:id/media/:mid).
 properties.post('/:id/copy', async (c) => {
@@ -316,18 +316,33 @@ properties.post('/:id/copy', async (c) => {
   }
   const title = `${base} copia ${max + 1}`.slice(0, 160);
 
+  // Link del aviso: external_url es único, así que la copia lleva el mismo link + "#copia-N"
+  // (el fragment no cambia la página que abre; el cliente lo quita al compartir/copiar el
+  // link, ver publicLink en share-block.ts). N sale del título de la copia; si ya está
+  // tomado, sube hasta uno libre. Si la original no tiene link, la copia tampoco.
+  const srcUrl = typeof src.external_url === 'string' ? src.external_url.trim() : '';
+  let externalUrl: string | null = null;
+  if (srcUrl) {
+    const urlBase = srcUrl.replace(/#copia-\d+$/i, '');
+    for (let n = max + 1; externalUrl == null; n++) {
+      const candidate = `${urlBase}#copia-${n}`;
+      const taken = await c.env.DB.prepare('SELECT 1 FROM properties WHERE external_url = ? LIMIT 1').bind(candidate).first();
+      if (!taken) externalUrl = candidate;
+    }
+  }
+
   const ins = await c.env.DB
     .prepare(
       `INSERT INTO properties
         (owner_kind, agency_id, branch_id, owner_user_id, operation, kind, title, description,
          price, currency, price_period, area_m2, rooms, capacity, available_from, available_until,
-         bathrooms, amenities, address, city, province, lat, lng, status, published)
+         bathrooms, amenities, address, city, province, external_url, lat, lng, status, published)
        SELECT owner_kind, agency_id, branch_id, owner_user_id, operation, kind, ?, description,
          price, currency, price_period, area_m2, rooms, capacity, available_from, available_until,
-         bathrooms, amenities, address, city, province, lat, lng, 'disponible', published
+         bathrooms, amenities, address, city, province, ?, lat, lng, 'disponible', published
        FROM properties WHERE id = ?`,
     )
-    .bind(title, id)
+    .bind(title, externalUrl, id)
     .run();
   const newId = ins.meta.last_row_id;
   if (!newId) return bad(c, 'No se pudo copiar la propiedad');

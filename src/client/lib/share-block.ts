@@ -11,6 +11,13 @@ import type { Property } from './types';
 
 type ShareableProperty = Pick<Property, 'title' | 'address' | 'city' | 'external_url' | 'season_prices'>;
 
+/** Link del aviso tal como se comparte: sin el "#copia-N" que el servidor le agrega a las
+ *  copias de una propiedad (external_url es único, ver POST /:id/copy). Todas las copias
+ *  comparten el link de la original. */
+export function publicLink(url: string): string {
+  return url.replace(/#copia-\d+$/i, '');
+}
+
 /** "Del 1/1 al 5/1" — siempre con el mes al lado del día, mismo mes o cruzando de mes
  *  (ej. "Del 28/1 al 3/2"). `to` ya viene resuelto (= from si es un solo día). Devuelve
  *  "El D/M" si el rango es de un único día. */
@@ -40,7 +47,7 @@ export function shareBlock(p: ShareableProperty, from?: string, to?: string): st
   const cut = base.lastIndexOf(' - ');
   const l1 = cut === -1 ? `🏡${base}` : `🏡${base.slice(0, cut)} - 📍${base.slice(cut + 3)}`;
   const lines = [l1];
-  if (p.external_url) lines.push(p.external_url);
+  if (p.external_url) lines.push(publicLink(p.external_url));
   const price = from ? quoteForRange(p.season_prices ?? null, from, to || from) : null;
   if (price != null) {
     const n = rangeNights(from!, to || from!);

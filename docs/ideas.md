@@ -378,6 +378,27 @@ falta. Si se decide sacarla, tocar esos dos archivos (la barra en el JSX de
 `property-row.tsx` y, si no queda usada en ningún otro lado, borrar
 `completeness.ts` entero — confirmar antes con un grep de `completeness`).
 
+## Barra de acciones masivas del Inventario — desactivada (2026-09-20)
+
+Tomy pidió sacarla de la vista por ahora ("no la necesito por el momento"), **sin
+borrar el código**: está comentada en `properties-panel.tsx` (bloque `{/* … */}`
+justo antes de `<div className="pbar">`, con un comentario que apunta a esta nota).
+
+Es la barra oscura que aparecía arriba de la lista al tildar propiedades
+(`.bulk-bar-wrap` / `.bulk-bar` en `styles.css`): "N seleccionadas", "Seleccionar
+las N que coinciden", **Compartir por WhatsApp** (o **Enviar por correo** en modo
+adjuntar), **Publicar**, **Despublicar**, **Marcar como vendida**, **Mover a
+sucursal…**, **Eliminar** y **Cancelar**.
+
+- **Para reactivarla:** descomentar ese bloque. Los handlers `bulkShare`,
+  `bulkSendToMail`, `bulkPatch` y `bulkDelete`, el estado `selected` y
+  `canSelectAllMatches` siguen definidos en el componente, no hace falta tocar nada más.
+- **Qué sigue andando sin la barra:** los checkboxes por fila y "Todas" (siguen
+  armando `selected`), y el botón Compartir de cada fila, que con varias filas
+  seleccionadas manda todas juntas (`property-row.tsx`). Lo que no hay es forma de
+  publicar/despublicar/mover/eliminar en lote ni de limpiar la selección de un click
+  (se destilda a mano o con "Todas").
+
 ---
 
 Conviene trabajar de a un apartado por vez, en orden o por prioridad — no

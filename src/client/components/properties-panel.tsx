@@ -254,8 +254,13 @@ export function PropertiesPanel({ branches, onChanged, preset, mailAttach, onSen
     if (f.branch && String(p.branch_id) !== f.branch) return false;
     if (f.kind && (p.kind || '') !== f.kind) return false;
     if (f.priced) {
-      // Solo mira "Precios por temporada" — el precio fijo (p.price) no cuenta acá.
-      const hasPrice = !!p.season_prices && p.season_prices !== '[]';
+      // Solo mira "Precios por temporada" — el precio fijo (p.price) no cuenta acá. Con
+      // fechas puestas, "tiene precio" es que haya tarifa para ESE rango (misma cotización
+      // que Compartir/orden): una propiedad con tarifas en otros meses, pero no en estos
+      // días, cuenta como sin precio. Sin fechas, alcanza con tener alguna tarifa cargada.
+      const hasPrice = dateActive
+        ? quoteForRange(p.season_prices, dFrom, dTo) != null
+        : !!p.season_prices && p.season_prices !== '[]';
       if (f.priced === 'yes' && !hasPrice) return false;
       if (f.priced === 'no' && hasPrice) return false;
     }
@@ -417,7 +422,7 @@ export function PropertiesPanel({ branches, onChanged, preset, mailAttach, onSen
           </SelectContent>
         </Select>
         <Select value={f.priced || ALL} onValueChange={(v) => set('priced', v === ALL ? '' : v)}>
-          <SelectTrigger className="w-auto min-w-[130px]" title="Tiene (o no) tarifa cargada en Precios por temporada"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="w-auto min-w-[130px]" title="Tiene (o no) tarifa cargada en Precios por temporada. Con Fechas puesto, mira la tarifa de ese rango"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL}>Precio</SelectItem>
             <SelectItem value="yes">Con precio</SelectItem>
@@ -427,6 +432,9 @@ export function PropertiesPanel({ branches, onChanged, preset, mailAttach, onSen
         <input type="number" min={1} placeholder="Pers." title="Ordena por capacidad: primero las de esa cantidad y las más grandes. No oculta ninguna." value={f.capacity} onChange={(e) => set('capacity', e.target.value)} style={{ maxWidth: 74 }} />
         <DateRangePicker from={f.dateFrom} to={f.dateTo} onChange={(dateFrom, dateTo) => setF((s) => ({ ...s, dateFrom, dateTo }))} onDone={load} />
       </div>
+      {/* Barra de acciones masivas: desactivada por ahora (ver docs/ideas.md → "Barra de acciones
+          masivas"). Para reactivarla, descomentar este bloque; los handlers (bulkShare,
+          bulkSendToMail, bulkPatch, bulkDelete) siguen definidos arriba.
       <div className={selected.size > 0 ? 'bulk-bar-wrap open' : 'bulk-bar-wrap'}>
         <div className="bulk-bar-inner">
           <div className="bulk-bar">
@@ -457,6 +465,7 @@ export function PropertiesPanel({ branches, onChanged, preset, mailAttach, onSen
           </div>
         </div>
       </div>
+      */}
       <div className="pbar">
         <label className="chk-all">
           <input type="checkbox" checked={allSel} onChange={toggleAll} />
