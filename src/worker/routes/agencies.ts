@@ -52,7 +52,15 @@ agencies.get('/summary', async (c) => {
       .prepare(`SELECT ${COMPUTED_STATUS_SQL} AS status, COUNT(*) AS n FROM properties p WHERE p.agency_id = ? AND p.archived_at IS NULL GROUP BY 1`)
       .bind(aid)
       .all(),
-    c.env.DB.prepare('SELECT operation, COUNT(*) AS n FROM properties WHERE agency_id = ? AND archived_at IS NULL GROUP BY operation').bind(aid).all(),
+    // Cuenta cada propiedad en su operación principal Y en la secundaria (una temporario+venta
+    // suma en las dos filas), igual que el filtro del Inventario al que lleva cada fila.
+    c.env.DB.prepare(
+      `SELECT operation, COUNT(*) AS n FROM (
+         SELECT operation FROM properties WHERE agency_id = ? AND archived_at IS NULL
+         UNION ALL
+         SELECT operation_secondary FROM properties WHERE agency_id = ? AND archived_at IS NULL AND operation_secondary IS NOT NULL
+       ) GROUP BY operation`,
+    ).bind(aid, aid).all(),
     c.env.DB
       .prepare(
         `SELECT b.id, b.name,

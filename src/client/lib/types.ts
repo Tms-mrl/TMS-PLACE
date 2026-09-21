@@ -51,7 +51,10 @@ export type Branch = { id: number; name: string; address: string | null; phone: 
 
 export type Property = {
   id: number;
+  /** Operación principal (alquiler | venta | temporario). */
   operation: string;
+  /** Operación secundaria opcional (ej. temporario + venta); null = solo la principal. */
+  operation_secondary?: string | null;
   kind: string | null;
   title: string;
   /** Contacto del CRM que la dejó en consignación (vía `mandates`). Lo trae /mine. */

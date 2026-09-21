@@ -817,6 +817,9 @@ input, select, textarea { color: var(--fg); }
   font-variant-numeric: tabular-nums;
 }
 .pchip-soft { border-color: transparent; background: transparent; color: var(--muted); padding-inline: 2px; }
+/* Operación de la propiedad: la principal en fuerte, la secundaria (ej. venta) apagada y con borde punteado. */
+.pchip-op { text-transform: capitalize; font-weight: 600; color: var(--forest); border-color: color-mix(in srgb, var(--forest) 35%, transparent); }
+.pchip-op2 { text-transform: capitalize; color: var(--muted); border-style: dashed; background: transparent; }
 .pchip-status { text-transform: capitalize; font-weight: 600; }
 .pchip-status.is-ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); background: color-mix(in srgb, var(--ok) 9%, var(--panel)); }
 .pchip-status.is-warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); background: color-mix(in srgb, var(--warn) 9%, var(--panel)); }

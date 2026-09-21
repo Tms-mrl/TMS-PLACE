@@ -17,7 +17,7 @@ async function sendEmail(_env: Env, _to: string, _subject: string, _body: string
 async function matchesFor(db: D1Database, query: any, since: string): Promise<Match[]> {
   const where: string[] = ['published = 1', 'created_at > ?'];
   const binds: unknown[] = [since];
-  if (query.op && ['venta', 'alquiler', 'temporario'].includes(query.op)) { where.push('operation = ?'); binds.push(query.op); }
+  if (query.op && ['venta', 'alquiler', 'temporario'].includes(query.op)) { where.push('(operation = ? OR operation_secondary = ?)'); binds.push(query.op, query.op); }
   if (query.ciudad) { where.push('LOWER(city) LIKE ?'); binds.push(`%${String(query.ciudad).toLowerCase()}%`); }
   if (query.min != null) { where.push('price >= ?'); binds.push(query.min); }
   if (query.max != null) { where.push('price <= ?'); binds.push(query.max); }

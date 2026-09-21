@@ -32,7 +32,7 @@ function initForm(edit?: Property) {
   if (!edit) return { ...emptyForm };
   const s = (v: unknown) => (v != null ? String(v) : '');
   return {
-    title: edit.title || '', operation: edit.operation || 'alquiler', kind: edit.kind || '',
+    title: edit.title || '', operation: edit.operation || 'alquiler', operation_secondary: edit.operation_secondary || '', kind: edit.kind || '',
     price: s(edit.price), currency: edit.currency || 'ARS', price_period: edit.price_period || '', rooms: s(edit.rooms), bathrooms: s(edit.bathrooms),
     area_m2: s(edit.area_m2), capacity: s(edit.capacity), available_from: edit.available_from || '', available_until: edit.available_until || '',
     address: edit.address || '', city: edit.city || '', province: edit.province || '', description: edit.description || '',
@@ -115,7 +115,7 @@ function PhotoStrip({ propertyId, media, setMedia }: { propertyId: number; media
 }
 
 const emptyForm = {
-  title: '', operation: 'alquiler', kind: 'departamento', price: '', currency: 'ARS', price_period: '',
+  title: '', operation: 'alquiler', operation_secondary: '', kind: 'departamento', price: '', currency: 'ARS', price_period: '',
   rooms: '', bathrooms: '', area_m2: '', capacity: '', available_from: '', available_until: '',
   address: '', city: '', province: '', description: '', external_url: '',
 };
@@ -153,7 +153,7 @@ export function PropertyForm({ scope, branches, edit, initial, onClose, onSaved 
   const close = () => { onSaved(); onClose(); };
 
   const commonBody = () => ({
-    title: f.title, operation: f.operation, kind: f.kind, description: f.description,
+    title: f.title, operation: f.operation, operation_secondary: f.operation_secondary || null, kind: f.kind, description: f.description,
     price: Number(f.price) || null, currency: f.currency, price_period: f.price_period, rooms: Number(f.rooms) || null,
     bathrooms: Number(f.bathrooms) || null, area_m2: Number(f.area_m2) || null, capacity: Number(f.capacity) || null,
     available_from: f.available_from || null, available_until: f.available_until || null,
@@ -245,7 +245,7 @@ export function PropertyForm({ scope, branches, edit, initial, onClose, onSaved 
             </label>
           )}
           <div className="row2">
-            <Select value={f.operation} onValueChange={(v) => set('operation', v)}>
+            <Select value={f.operation} onValueChange={(v) => setF((s) => ({ ...s, operation: v, operation_secondary: s.operation_secondary === v ? '' : s.operation_secondary }))}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="alquiler">Alquiler</SelectItem>
@@ -271,6 +271,19 @@ export function PropertyForm({ scope, branches, edit, initial, onClose, onSaved 
               />
             )}
           </div>
+          {/* Operación secundaria (opcional): ej. principal Temporario + también en Venta. */}
+          <label className="fld">
+            <span className="fld-lbl">También en</span>
+            <Select value={f.operation_secondary || NONE} onValueChange={(v) => set('operation_secondary', v === NONE ? '' : v)}>
+              <SelectTrigger><SelectValue placeholder="Solo la operación principal" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NONE}>Solo la operación principal</SelectItem>
+                {[['alquiler', 'Alquiler'], ['venta', 'Venta'], ['temporario', 'Temporario']]
+                  .filter(([v]) => v !== f.operation)
+                  .map(([v, label]) => <SelectItem key={v} value={v!}>{label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </label>
           <div className="row2">
             <input type="number" placeholder="Precio" value={f.price} onChange={(e) => set('price', e.target.value)} />
             <Select value={f.currency} onValueChange={(v) => set('currency', v)}>

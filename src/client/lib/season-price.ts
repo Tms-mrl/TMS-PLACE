@@ -1,6 +1,10 @@
-import type { SeasonPrice } from './types';
+import { MONTHS_ES, type SeasonPrice } from './types';
 
 const DAY_MS = 86_400_000;
+
+function parseRows(seasonJson: string | null | undefined): SeasonPrice[] {
+  try { return JSON.parse(seasonJson || '[]') as SeasonPrice[]; } catch { return []; }
+}
 
 /** Días del rango [from, to] (YYYY-MM-DD), inclusive → "del 1 al 4" = 4. `null` si las
  *  fechas no parsean o `to` < `from`. La usa `quoteForRange` y el label "N días x $..."
@@ -31,8 +35,7 @@ export function rangeNights(from: string, to: string): number | null {
  */
 export function quoteForRange(seasonJson: string | null | undefined, from: string, to: string): number | null {
   if (!from) return null;
-  let rows: SeasonPrice[];
-  try { rows = JSON.parse(seasonJson || '[]') as SeasonPrice[]; } catch { return null; }
+  const rows = parseRows(seasonJson);
   if (!rows.length) return null;
 
   const n = rangeNights(from, to);
@@ -59,4 +62,53 @@ export function quoteForRange(seasonJson: string | null | undefined, from: strin
   if (n >= 14) return fortnight ?? null;
   if (n >= 7) return week != null ? (week / 7) * n : null;
   return day != null ? day * n : null;
+}
+
+/** Tarifa más próxima a `today` (sin filtro de fechas): recorre las quincenas desde la
+ *  actual hacia adelante (con vuelta al año) y toma la primera que tenga algún precio. Dentro
+ *  de esa quincena prefiere la unidad más chica: día → semana → quincena → mes. `null` si no
+ *  hay ninguna tarifa con importe. */
+export function nearestRate(
+  seasonJson: string | null | undefined,
+  today: Date = new Date(),
+): { amount: number; unit: 'día' | 'semana' | 'quincena' | 'mes'; label: string } | null {
+  const byMonth = new Map(parseRows(seasonJson).map((r) => [r.month, r]));
+  if (!byMonth.size) return null;
+  const firstHalf = today.getDate() >= 16 ? 1 : 0;
+  for (let i = 0; i < 24; i++) {
+    const idx = today.getMonth() * 2 + firstHalf + i;
+    const month = (Math.floor(idx / 2) % 12) + 1;
+    const q2 = idx % 2 === 1;
+    const r = byMonth.get(month);
+    if (!r) continue;
+    const label = `${MONTHS_ES[month - 1]!.slice(0, 3).toLowerCase()} ${q2 ? 2 : 1}ª quinc.`;
+    const day = q2 ? r.price_day_q2 : r.price_day_q1;
+    const week = q2 ? r.price_week_q2 : r.price_week_q1;
+    const fortnight = q2 ? r.price_fortnight_q2 : r.price_fortnight_q1;
+    if (day != null) return { amount: day, unit: 'día', label };
+    if (week != null) return { amount: week, unit: 'semana', label };
+    if (fortnight != null) return { amount: fortnight, unit: 'quincena', label };
+    if (r.price_month != null) return { amount: r.price_month, unit: 'mes', label };
+  }
+  return null;
+}
+
+/** Qué precio muestra la tarjeta del Inventario (y por cuál se ordena). `null` = la propiedad
+ *  no tiene tarifas por temporada → se usa el precio fijo (`p.price`, ej. una venta).
+ *  Con tarifas: con fechas filtradas → la cotización de ese rango ('quote'); sin fechas → la
+ *  tarifa más próxima a hoy ('nearest'); si ninguna aplica → 'none' (NO se cae al precio
+ *  fijo: en una propiedad de temporada ese es el de venta y confunde). Todo en ARS. */
+export type SeasonDisplay =
+  | { kind: 'quote'; amount: number }
+  | { kind: 'nearest'; amount: number; unit: string; label: string }
+  | { kind: 'none' };
+
+export function seasonDisplay(seasonJson: string | null | undefined, from: string, to: string, today?: Date): SeasonDisplay | null {
+  if (!parseRows(seasonJson).length) return null;
+  if (from) {
+    const amount = quoteForRange(seasonJson, from, to);
+    return amount != null ? { kind: 'quote', amount } : { kind: 'none' };
+  }
+  const n = nearestRate(seasonJson, today);
+  return n ? { kind: 'nearest', ...n } : { kind: 'none' };
 }

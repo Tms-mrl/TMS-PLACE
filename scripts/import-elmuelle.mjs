@@ -371,14 +371,17 @@ async function buildSql() {
   const list = JSON.parse(await readFile(LISTINGS, 'utf8')).filter((x) => !x.error);
   const rows = list.map((x) => {
     const amen = x.amenities && x.amenities.length ? JSON.stringify(x.amenities) : null;
+    // Las "venta" de El Muelle se cargan como temporario (principal) + venta (secundaria):
+    // el foco del negocio es el temporario (ver migración 0025).
+    const [op1, op2] = x.operation === 'venta' ? ['temporario', 'venta'] : [x.operation, null];
     return `INSERT INTO properties
-  (owner_kind, agency_id, branch_id, operation, kind, title, description, price, currency, price_period,
+  (owner_kind, agency_id, branch_id, operation, operation_secondary, kind, title, description, price, currency, price_period,
    area_m2, rooms, bathrooms, capacity, amenities, address, city, province, lat, lng, status, published, external_url)
-VALUES ('agency', ${AGENCY_ID}, ${sqlNum(x.branch_id)}, ${sqlStr(x.operation)}, ${sqlStr(x.kind)}, ${sqlStr(x.title)}, ${sqlStr(x.description)},
+VALUES ('agency', ${AGENCY_ID}, ${sqlNum(x.branch_id)}, ${sqlStr(op1)}, ${sqlStr(op2)}, ${sqlStr(x.kind)}, ${sqlStr(x.title)}, ${sqlStr(x.description)},
    ${sqlNum(x.price)}, ${sqlStr(x.currency)}, ${sqlStr(x.price_period || null)}, ${sqlNum(x.area_m2)}, ${sqlNum(x.rooms)}, ${sqlNum(x.bathrooms)}, ${sqlNum(x.capacity)},
    ${sqlStr(amen)}, ${sqlStr(x.address)}, ${sqlStr(x.city)}, ${sqlStr(x.province)}, ${sqlNum(x.lat)}, ${sqlNum(x.lng)}, ${sqlStr(x.status)}, 1, ${sqlStr(x.external_url)})
 ON CONFLICT(external_url) WHERE external_url IS NOT NULL DO UPDATE SET
-  branch_id=excluded.branch_id, operation=excluded.operation, kind=excluded.kind, title=excluded.title,
+  branch_id=excluded.branch_id, operation=excluded.operation, operation_secondary=excluded.operation_secondary, kind=excluded.kind, title=excluded.title,
   description=excluded.description, price=excluded.price, currency=excluded.currency, price_period=excluded.price_period,
   area_m2=excluded.area_m2, rooms=excluded.rooms, bathrooms=excluded.bathrooms, capacity=excluded.capacity, amenities=excluded.amenities,
   address=excluded.address, city=excluded.city, province=excluded.province, lat=excluded.lat, lng=excluded.lng,

@@ -17,6 +17,12 @@ const OPERATIONS = ['venta', 'alquiler', 'temporario'];
 // solo estos dos son asignables a mano vía PATCH (vender / revertir venta).
 const MANUAL_STATUSES = ['disponible', 'vendida'];
 
+// Operación secundaria (opcional): una de OPERATIONS distinta de la principal, o null.
+function secondaryOp(v: unknown, primary: string | null): string | null {
+  const s = str(v, 20);
+  return s && OPERATIONS.includes(s) && s !== primary ? s : null;
+}
+
 // amenities llega como array de keys → se guarda como JSON string (o null).
 function jsonAmenities(v: unknown): string | null {
   return Array.isArray(v) ? JSON.stringify(v.filter((x) => typeof x === 'string').slice(0, 20)) : null;
@@ -29,7 +35,7 @@ properties.get('/mine', async (c) => {
   const agencyId = mine?.agency.id ?? -1;
   const res = await c.env.DB
     .prepare(
-      `SELECT p.id, p.owner_kind, p.operation, p.kind, p.title, p.price, p.currency, p.price_period, p.city, p.province,
+      `SELECT p.id, p.owner_kind, p.operation, p.operation_secondary, p.kind, p.title, p.price, p.currency, p.price_period, p.city, p.province,
               p.address, p.description, p.lat, p.lng, p.rooms, p.area_m2, p.bathrooms, p.capacity, p.amenities,
               p.available_from, p.available_until, p.external_url,
               ${COMPUTED_STATUS_SQL} AS status, p.published, p.archived_at, p.branch_id, b.name AS branch_name, p.created_at, p.updated_at,
@@ -89,13 +95,13 @@ properties.post('/', async (c) => {
   const row = await c.env.DB
     .prepare(
       `INSERT INTO properties
-        (owner_kind, agency_id, branch_id, owner_user_id, operation, kind, title, description,
+        (owner_kind, agency_id, branch_id, owner_user_id, operation, operation_secondary, kind, title, description,
          price, currency, price_period, area_m2, rooms, capacity, available_from, available_until, bathrooms, amenities,
          address, city, province, external_url, lat, lng, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'disponible') RETURNING *`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'disponible') RETURNING *`,
     )
     .bind(
-      ownerKind, agencyId, branchId, c.var.user.id, operation,
+      ownerKind, agencyId, branchId, c.var.user.id, operation, secondaryOp(body.operation_secondary, operation),
       str(body.kind, 40), title, str(body.description, 4000),
       num(body.price), str(body.currency, 8) || 'USD', str(body.price_period, 10), num(body.area_m2), num(body.rooms),
       num(body.capacity), str(body.available_from, 10), str(body.available_until, 10),
@@ -203,6 +209,11 @@ properties.patch('/:id', async (c) => {
 
   if ('title' in body) { const t = str(body.title, 160); if (!t) return bad(c, 'title vacío'); setStr('title', t); }
   if ('operation' in body) { const o = str(body.operation, 20); if (!o || !OPERATIONS.includes(o)) return bad(c, 'operation inválida'); setStr('operation', o); }
+  // La secundaria se re-normaliza si cambia cualquiera de las dos: no puede quedar igual a la principal.
+  if ('operation' in body || 'operation_secondary' in body) {
+    const primary = 'operation' in body ? str(body.operation, 20) : (prop.operation as string);
+    setStr('operation_secondary', secondaryOp('operation_secondary' in body ? body.operation_secondary : prop.operation_secondary, primary));
+  }
   if ('kind' in body) setStr('kind', str(body.kind, 40));
   if ('description' in body) setStr('description', str(body.description, 4000));
   if ('price' in body) setNum('price', num(body.price));
@@ -334,10 +345,10 @@ properties.post('/:id/copy', async (c) => {
   const ins = await c.env.DB
     .prepare(
       `INSERT INTO properties
-        (owner_kind, agency_id, branch_id, owner_user_id, operation, kind, title, description,
+        (owner_kind, agency_id, branch_id, owner_user_id, operation, operation_secondary, kind, title, description,
          price, currency, price_period, area_m2, rooms, capacity, available_from, available_until,
          bathrooms, amenities, address, city, province, external_url, lat, lng, status, published)
-       SELECT owner_kind, agency_id, branch_id, owner_user_id, operation, kind, ?, description,
+       SELECT owner_kind, agency_id, branch_id, owner_user_id, operation, operation_secondary, kind, ?, description,
          price, currency, price_period, area_m2, rooms, capacity, available_from, available_until,
          bathrooms, amenities, address, city, province, ?, lat, lng, 'disponible', published
        FROM properties WHERE id = ?`,

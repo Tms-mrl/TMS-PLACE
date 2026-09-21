@@ -317,6 +317,8 @@ type CardProperty = {
   id: number;
   title: string;
   operation: string;
+  /** Operación secundaria (ej. temporario + venta): se muestra junto a la principal en la card. */
+  operation_secondary?: string | null;
   price: number | null;
   currency: string;
   city: string | null;
@@ -367,7 +369,7 @@ export function propertyCard(p: CardProperty): string {
   // pegado al mismo tamaño hacía que "ARS 340.000 /noche" no entrara en una columna de cel.
   const per = p.price != null ? periodLabel(p.price_period) : '';
   return `<a class="card"${geo} href="/propiedad/${p.id}">
-    <div class="ph"><span class="op">${esc(p.operation)}</span>${img}</div>
+    <div class="ph"><span class="op">${esc([p.operation, p.operation_secondary].filter(Boolean).join(' · '))}</span>${img}</div>
     <div class="body">
       <div class="price">${esc(money(p.price, p.currency))}${per ? `<span class="per">${esc(per)}</span>` : ''}</div>
       <h3 class="ttl">${esc(p.title)}</h3>

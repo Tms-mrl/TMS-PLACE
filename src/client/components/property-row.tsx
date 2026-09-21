@@ -7,7 +7,7 @@ import {
 import { api } from '../lib/api';
 import { cn } from '../lib/cn';
 import { mediaUrl, money, PERIOD_SUFFIX, type Property } from '../lib/types';
-import { quoteForRange } from '../lib/season-price';
+import { seasonDisplay } from '../lib/season-price';
 import { publicLink } from '../lib/share-block';
 import { AMENITIES, parseAmenities } from '../lib/amenities';
 import { completeness, completenessHint, completenessTone } from '../lib/completeness';
@@ -128,10 +128,12 @@ export function PropertyRow({ p, index, expanded, checked, selectMode, selectedC
     p.area_m2 ? { k: 'area', n: `${p.area_m2} m²`, lbl: 'superficie', ic: <Ruler className="h-3.5 w-3.5" /> } : null,
   ].filter(Boolean) as { k: string; n: string; lbl: string; ic: ReactNode }[];
 
-  // Precio por temporada para el rango filtrado (mismo cálculo que `sortPrice` en
-  // PropertiesPanel); sin filtro de fechas, o sin esa tarifa cargada, cae al fijo.
-  const quoted = dateFrom ? quoteForRange(p.season_prices, dateFrom, dateTo) : null;
-  const displayPrice = quoted ?? p.price ?? null;
+  // Precio de la tarjeta (mismo cálculo que `sortPrice` en PropertiesPanel): con tarifas por
+  // temporada, la cotización del rango filtrado o —sin fechas— la tarifa más próxima a hoy
+  // (siempre en ARS); sin tarifas cargadas, el precio fijo de la propiedad (ej. una venta).
+  const season = seasonDisplay(p.season_prices, dateFrom, dateTo);
+  const displayPrice = season ? (season.kind === 'none' ? null : season.amount) : p.price ?? null;
+  const displayCurrency = season ? 'ARS' : p.currency;
 
   // En "modo selección" (ya hay al menos una marcada), tocar cualquier parte de la fila
   // que no sea un control (botón / link / el propio check / el menú) marca o desmarca —
@@ -173,6 +175,9 @@ export function PropertyRow({ p, index, expanded, checked, selectMode, selectedC
         </div>
 
         <div className="prow-chips">
+          {/* Operación: la principal con chip normal, la secundaria (si hay) más suave. */}
+          <span className="pchip pchip-op">{p.operation}</span>
+          {p.operation_secondary && <span className="pchip pchip-op2" title="Operación secundaria">{p.operation_secondary}</span>}
           {p.kind && <span className="pchip">{p.kind}</span>}
           <StatusChip status={p.status} />
           {p.archived_at
@@ -189,9 +194,17 @@ export function PropertyRow({ p, index, expanded, checked, selectMode, selectedC
       <div className="prow-money">
         {displayPrice != null && (
           <>
-            <b className="prow-price">{money(displayPrice, p.currency, null)}</b>
-            {quoted == null && PERIOD_SUFFIX[p.price_period || ''] && <span className="prow-period">{PERIOD_SUFFIX[p.price_period || '']}</span>}
+            <b className="prow-price">{money(displayPrice, displayCurrency, null)}</b>
+            {season?.kind === 'nearest' && (
+              <span className="prow-period" title="Tarifa más próxima a hoy — poné Fechas para ver otra">por {season.unit} · {season.label}</span>
+            )}
+            {!season && PERIOD_SUFFIX[p.price_period || ''] && <span className="prow-period">{PERIOD_SUFFIX[p.price_period || '']}</span>}
+            {/* Temporario + venta sin tarifas de temporada: el precio fijo que queda es el de venta. */}
+            {!season && p.operation_secondary === 'venta' && <span className="prow-period">precio de venta</span>}
           </>
+        )}
+        {season?.kind === 'none' && (
+          <span className="prow-period">{dateFrom ? 'Sin tarifa para esas fechas' : 'Sin tarifa cargada'}</span>
         )}
       </div>
 

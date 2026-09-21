@@ -6,7 +6,7 @@ import {
 import { api } from '../lib/api';
 import { cn } from '../lib/cn';
 import { mediaUrl, PROPERTY_KINDS, STATUSES, type Branch, type Media, type Property } from '../lib/types';
-import { quoteForRange } from '../lib/season-price';
+import { quoteForRange, seasonDisplay } from '../lib/season-price';
 import { shareBlocks } from '../lib/share-block';
 import { toast } from '../lib/toast';
 import { prefetchClients } from '../lib/clients-cache';
@@ -186,12 +186,14 @@ export function PropertiesPanel({ branches, onChanged, preset, mailAttach, onSen
   const dFrom = f.dateFrom || f.dateTo;
   const dTo = f.dateTo || f.dateFrom;
   const dateActive = !!dFrom;
-  /** Precio a usar para ordenar: con fechas activas, la tarifa cotizada para ese rango
-   *  (semana/quincena/día según `quoteForRange`); si la propiedad no tiene esa tarifa
-   *  cargada, o no hay fechas, cae al precio fijo. */
+  /** Precio a usar para ordenar: el mismo que muestra la tarjeta (`seasonDisplay`): con
+   *  fechas, la tarifa cotizada para ese rango; sin fechas, la tarifa más próxima a hoy; una
+   *  propiedad con tarifas pero sin ninguna aplicable va al final. Sin tarifas cargadas,
+   *  el precio fijo. */
   const sortPrice = (p: Property): number => {
-    const q = dateActive ? quoteForRange(p.season_prices, dFrom, dTo) : null;
-    return q ?? p.price ?? -Infinity;
+    const s = seasonDisplay(p.season_prices, dFrom, dTo);
+    if (s) return s.kind === 'none' ? -Infinity : s.amount;
+    return p.price ?? -Infinity;
   };
 
   function toggleSel(id: number) { setSelected((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; }); }
@@ -249,7 +251,8 @@ export function PropertiesPanel({ branches, onChanged, preset, mailAttach, onSen
     // Archivadas ocultas por defecto (el toggle "Ver archivadas" invierte esto).
     if (f.archived ? !p.archived_at : !!p.archived_at) return false;
     if (f.text) { const q = f.text.toLowerCase(); if (!(`${p.title} ${p.city || ''}`.toLowerCase().includes(q))) return false; }
-    if (f.op && p.operation !== f.op) return false;
+    // Matchea la operación principal O la secundaria (una temporario + venta sale en las dos).
+    if (f.op && p.operation !== f.op && p.operation_secondary !== f.op) return false;
     if (f.status && p.status !== f.status) return false;
     if (f.branch && String(p.branch_id) !== f.branch) return false;
     if (f.kind && (p.kind || '') !== f.kind) return false;
@@ -309,7 +312,7 @@ export function PropertiesPanel({ branches, onChanged, preset, mailAttach, onSen
   // sumar las archivadas daría un total que no coincide con ninguna lista de la pantalla.
   const kpis = useMemo(() => {
     const vivas = props.filter((p) => !p.archived_at);
-    const porOp = (op: string) => vivas.filter((p) => p.operation === op).length;
+    const porOp = (op: string) => vivas.filter((p) => p.operation === op || p.operation_secondary === op).length;
     return {
       total: vivas.length,
       venta: porOp('venta'),
@@ -475,7 +478,7 @@ export function PropertiesPanel({ branches, onChanged, preset, mailAttach, onSen
           value={sort ? `${sort.key}:${sort.dir}` : ALL}
           onValueChange={(v) => { if (v === ALL) { setSort(null); return; } const [k, d] = v.split(':'); setSort({ key: k!, dir: Number(d) as 1 | -1 }); }}
         >
-          <SelectTrigger className="h-9 w-auto min-w-[160px] text-xs" title={dateActive ? 'Con Fechas puesto, ordena por la tarifa cotizada para ese rango' : 'Ordena por el precio fijo de la propiedad'}><SelectValue /></SelectTrigger>
+          <SelectTrigger className="h-9 w-auto min-w-[160px] text-xs" title={dateActive ? 'Con Fechas puesto, ordena por la tarifa cotizada para ese rango' : 'Ordena por el precio que muestra la tarjeta (tarifa más próxima a hoy, o el precio fijo si no tiene tarifas)'}><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL}>Más recientes</SelectItem>
             <SelectItem value="price:1">Precio ↑</SelectItem>

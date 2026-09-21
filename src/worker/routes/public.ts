@@ -26,6 +26,7 @@ type CardRow = {
   id: number;
   title: string;
   operation: string;
+  operation_secondary: string | null;
   price: number | null;
   currency: string;
   city: string | null;
@@ -60,14 +61,14 @@ function parseFilters(q: URLSearchParams): Filters {
 }
 
 const CARD_COLS =
-  `id, title, operation, price, currency, city, province, rooms, area_m2, bathrooms, capacity, amenities, price_period, lat, lng,
+  `id, title, operation, operation_secondary, price, currency, city, province, rooms, area_m2, bathrooms, capacity, amenities, price_period, lat, lng,
    (SELECT r2_key FROM property_media pm WHERE pm.property_id = properties.id
     ORDER BY pm.sort LIMIT 1) AS cover_key`;
 
 async function queryProperties(db: D1Database, f: Filters): Promise<CardRow[]> {
   const where: string[] = ['published = 1'];
   const binds: unknown[] = [];
-  if (f.operation) { where.push('operation = ?'); binds.push(f.operation); }
+  if (f.operation) { where.push('(operation = ? OR operation_secondary = ?)'); binds.push(f.operation, f.operation); }
   if (f.city) { where.push('LOWER(city) LIKE ?'); binds.push(`%${f.city.toLowerCase()}%`); }
   // El filtro de precio se scopea a la moneda elegida (salvo 'all'): así 100.000 ARS no matchea 50.000 USD.
   const priceActive = f.minPrice != null || f.maxPrice != null;
@@ -449,7 +450,7 @@ publicSite.get('/propiedad/:id', async (c) => {
 
   // Ubicación NO va en los facts del panel (ya está bajo el título) para no repetir.
   const facts = [
-    ['Operación', prop.operation],
+    ['Operación', [prop.operation, prop.operation_secondary].filter(Boolean).join(' · ')],
     ['Tipo', prop.kind || '—'],
     ['Estado', prop.status],
   ].map(([k, v]) => `<li><b>${esc(k)}</b>${esc(v)}</li>`).join('');
@@ -484,7 +485,7 @@ publicSite.get('/propiedad/:id', async (c) => {
   return c.html(
     pageShell({
       title: `${prop.title} — ${money(prop.price, prop.currency, prop.price_period)} — ${brandName}`,
-      description: `${prop.operation} · ${loc || 'Propiedad'} · ${money(prop.price, prop.currency, prop.price_period)}. ${String(prop.description || '').slice(0, 120)}`,
+      description: `${[prop.operation, prop.operation_secondary].filter(Boolean).join(' · ')} · ${loc || 'Propiedad'} · ${money(prop.price, prop.currency, prop.price_period)}. ${String(prop.description || '').slice(0, 120)}`,
       origin,
       canonicalPath: `/propiedad/${prop.id}`,
       body,

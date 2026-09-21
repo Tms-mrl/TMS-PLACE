@@ -245,7 +245,7 @@ clients.get('/:id/matches', async (c) => {
 
   const where = ['p.agency_id = ?', 'p.archived_at IS NULL', "COALESCE(p.status, '') <> 'vendida'"];
   const binds: unknown[] = [mine.agency.id];
-  if (prefs.operation) { where.push('p.operation = ?'); binds.push(prefs.operation); }
+  if (prefs.operation) { where.push('(p.operation = ? OR p.operation_secondary = ?)'); binds.push(prefs.operation, prefs.operation); }
   if (prefs.city) { where.push('LOWER(p.city) LIKE ?'); binds.push(`%${prefs.city.toLowerCase()}%`); }
   if (prefs.max_price != null) {
     // Sin moneda declarada se compara el número pelado (dato viejo); con moneda, solo contra la suya.
