@@ -16,38 +16,40 @@ export function rangeNights(from: string, to: string): number | null {
   return Math.round((end.getTime() - start.getTime()) / DAY_MS) + 1;
 }
 
-/**
- * Precio a cotizar para un rango de fechas [from, to] (YYYY-MM-DD, inclusive), a partir
- * de las tarifas por temporada de la propiedad (`Property.season_prices`, JSON que trae
- * /mine). Devuelve el monto en ARS, o `null` si no se puede calcular: sin fecha `from`,
- * sin tarifa para ese mes, o sin precio cargado en el tramo que corresponde.
- *
- * Reglas (acordadas con el usuario, 2026-09-08; prorrateo de semana sumado 2026-09-11;
- * mes completo → price_month sumado 2026-09-18):
- *  - N = días del rango contados inclusive → "del 1 al 4" = 4.
- *  - Mes = el de la fecha de inicio. Quincena: 1ª = días 1-15, 2ª = 16-fin. Si el rango
- *    cruza la mitad de mes, se usa la 2ª quincena cuando le caen 3 días o más.
- *  - Del día 1 al último del mes (mismo mes): precio de mes fijo (`price_month`), si
- *    está cargado — sin esto, un mes de 30/31 días caía en la regla de abajo (N ≥ 14)
- *    y devolvía la tarifa de la 2ª quincena, no la del mes entero.
- *  - Tramo por bloques (el resto de los casos): N ≤ 6 → precio por día × N · 7 ≤ N ≤ 13
- *    → precio semana ÷ 7 × N (prorrateado) · N ≥ 14 → precio quincena (fijo).
- */
-export function quoteForRange(seasonJson: string | null | undefined, from: string, to: string): number | null {
-  if (!from) return null;
-  const rows = parseRows(seasonJson);
-  if (!rows.length) return null;
+function fmtDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
+/** Parte [from, to] en tramos que no cruzan un mes calendario. La tarifa vive por mes
+ *  (una fila de `property_season_prices` por mes), así que un rango que cruza de mes —
+ *  ej. 29/12 al 15/1 — hay que cotizarlo mes a mes y sumar; antes del fix (2026-09-22)
+ *  `quoteForRange` solo miraba el mes de `from` y cotizaba TODO el rango con esa fila
+ *  (18 noches cobradas como si fueran todas de la quincena de diciembre). */
+function splitByMonth(from: string, to: string): { from: string; to: string }[] {
+  const segments: { from: string; to: string }[] = [];
+  let cur = new Date(`${from}T00:00:00`);
+  const end = new Date(`${to}T00:00:00`);
+  while (cur.getTime() <= end.getTime()) {
+    const lastOfMonth = new Date(cur.getFullYear(), cur.getMonth() + 1, 0);
+    const segEnd = lastOfMonth.getTime() < end.getTime() ? lastOfMonth : end;
+    segments.push({ from: fmtDate(cur), to: fmtDate(segEnd) });
+    cur = new Date(segEnd.getTime() + DAY_MS);
+  }
+  return segments;
+}
+
+/** Cotiza un tramo QUE NO CRUZA DE MES (ver reglas abajo). Falla (`null`) si no hay fila
+ *  para ese mes o falta el precio del tramo que corresponde. */
+function quoteMonthSegment(rows: SeasonPrice[], from: string, to: string): number | null {
   const n = rangeNights(from, to);
   if (n == null) return null;
   const start = new Date(`${from}T00:00:00`);
-  const end = new Date(`${to || from}T00:00:00`);
+  const end = new Date(`${to}T00:00:00`);
   const row = rows.find((r) => r.month === start.getMonth() + 1);
   if (!row) return null;
 
   const lastDay = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
-  const isFullMonth = start.getDate() === 1 && end.getDate() === lastDay
-    && end.getMonth() === start.getMonth() && end.getFullYear() === start.getFullYear();
+  const isFullMonth = start.getDate() === 1 && end.getDate() === lastDay;
   if (isFullMonth && row.price_month != null) return row.price_month;
 
   let daysInQ2 = 0;
@@ -62,6 +64,43 @@ export function quoteForRange(seasonJson: string | null | undefined, from: strin
   if (n >= 14) return fortnight ?? null;
   if (n >= 7) return week != null ? (week / 7) * n : null;
   return day != null ? day * n : null;
+}
+
+/**
+ * Precio a cotizar para un rango de fechas [from, to] (YYYY-MM-DD, inclusive), a partir
+ * de las tarifas por temporada de la propiedad (`Property.season_prices`, JSON que trae
+ * /mine). Devuelve el monto en ARS, o `null` si no se puede calcular: sin fecha `from`,
+ * o sin precio cargado en algún tramo del rango (si el rango cruza de mes y falta la
+ * tarifa de UNO de los meses, se devuelve `null` para todo el rango — mejor no mostrar
+ * precio que mostrar uno incompleto).
+ *
+ * Reglas por tramo dentro de un mismo mes (acordadas con el usuario, 2026-09-08;
+ * prorrateo de semana sumado 2026-09-11; mes completo → price_month sumado 2026-09-18;
+ * split por mes al cruzar de mes sumado 2026-09-22, ver `splitByMonth`):
+ *  - N = días del tramo contados inclusive → "del 1 al 4" = 4.
+ *  - Quincena: 1ª = días 1-15, 2ª = 16-fin. Si el tramo cruza la mitad de mes, se usa la
+ *    2ª quincena cuando le caen 3 días o más.
+ *  - Del día 1 al último del mes (mismo mes): precio de mes fijo (`price_month`), si
+ *    está cargado — sin esto, un mes de 30/31 días caía en la regla de abajo (N ≥ 14)
+ *    y devolvía la tarifa de la 2ª quincena, no la del mes entero.
+ *  - Tramo por bloques (el resto de los casos): N ≤ 6 → precio por día × N · 7 ≤ N ≤ 13
+ *    → precio semana ÷ 7 × N (prorrateado) · N ≥ 14 → precio quincena (fijo).
+ *  - Un rango que cruza de mes (ej. 29/12 al 15/1) se parte en un tramo por mes y se
+ *    suman: 29-31/12 (3 noches, por día) + 1-15/1 (15 noches, = la 1ª quincena entera).
+ */
+export function quoteForRange(seasonJson: string | null | undefined, from: string, to: string): number | null {
+  if (!from) return null;
+  const rows = parseRows(seasonJson);
+  if (!rows.length) return null;
+  if (rangeNights(from, to || from) == null) return null;
+
+  let total = 0;
+  for (const seg of splitByMonth(from, to || from)) {
+    const amount = quoteMonthSegment(rows, seg.from, seg.to);
+    if (amount == null) return null;
+    total += amount;
+  }
+  return total;
 }
 
 /** Tarifa más próxima a `today` (sin filtro de fechas): recorre las quincenas desde la
