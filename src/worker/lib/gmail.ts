@@ -11,7 +11,11 @@ const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GMAIL_API = 'https://gmail.googleapis.com/gmail/v1/users/me';
 // Ventana del re-scan completo (cuando no hay historyId todavía, o venció). Alcanza
 // para no perder consultas viejas sin traer años de historial en cada full sync.
-const RESCAN_QUERY = 'newer_than:30d';
+// -in:spam -in:trash es cinturón y tirantes: la búsqueda de Gmail ya excluye Spam/Papelera
+// por defecto (mismo comportamiento que el buscador de Gmail sin "in:anywhere"), pero
+// dejarlo explícito documenta la intención — ver el filtro real en syncOneThread, que es
+// el que hace falta porque el sync incremental (listHistory) SÍ trae mensajes en Spam.
+const RESCAN_QUERY = 'newer_than:30d -in:spam -in:trash';
 
 export type MailAccountRow = {
   id: 1;
@@ -23,6 +27,8 @@ export type MailAccountRow = {
   last_history_id: string | null;
   last_sync_at: string | null;
   last_error: string | null;
+  /** Marca del backfill de spam de una sola vez (ver migración 0026 y syncGmail). */
+  spam_backfilled_at: string | null;
 };
 
 export type MailThreadRow = {
@@ -198,6 +204,9 @@ export type GmailMessage = {
   threadId: string;
   snippet?: string;
   internalDate?: string;
+  /** Gmail siempre lo trae en threads.get/messages.get (no restringimos `fields`). Lo usa
+   *  syncOneThread para no sincronizar mensajes en Spam/Papelera. */
+  labelIds?: string[];
   payload?: GmailMessagePart;
 };
 export type GmailThread = { id: string; historyId?: string; messages?: GmailMessage[] };
@@ -404,9 +413,27 @@ export async function sendNewMessage(env: Env, opts: {
 
 // ── Sync incremental (llamado desde el cron de 1 min, ver scheduled() en index.ts) ──
 
+/** Backfill de una sola vez (ver migración 0026): re-revisa los hilos YA guardados en
+ *  `mail_threads` contra Gmail y borra los que resulten Spam/Papelera — limpia lo que el
+ *  sync incremental dejó pasar antes del fix de syncOneThread (2026-09-22). El sync normal
+ *  (listHistory) no vuelve a tocar un hilo viejo sin actividad nueva, así que sin esto los
+ *  hilos de spam que ya estaban sincronizados se quedarían ahí para siempre. Tolera fallos
+ *  por hilo (igual que el loop de syncGmail) y se marca hecho pase lo que pase, para no
+ *  reintentar en cada tick si un hilo puntual falla siempre.
+ */
+async function backfillSpam(env: Env, myEmail: string): Promise<void> {
+  const rows = await env.DB.prepare('SELECT gmail_thread_id FROM mail_threads').all<{ gmail_thread_id: string }>();
+  for (const { gmail_thread_id } of rows.results) {
+    try { await syncOneThread(env, gmail_thread_id, myEmail); }
+    catch (e) { console.error('backfillSpam', gmail_thread_id, e); }
+  }
+  await env.DB.prepare("UPDATE mail_account SET spam_backfilled_at = datetime('now') WHERE id = 1").run();
+}
+
 export async function syncGmail(env: Env): Promise<void> {
   const account = await getMailAccount(env);
   if (!account) return; // no conectada todavía
+  if (!account.spam_backfilled_at) await backfillSpam(env, account.email);
 
   try {
     let threadIds: string[];
@@ -452,8 +479,20 @@ export async function syncGmail(env: Env): Promise<void> {
  *  (compose/reply), sin depender del próximo tick del cron de 1 min. */
 export async function syncOneThread(env: Env, gmailThreadId: string, myEmail: string): Promise<void> {
   const thread = await getThread(env, gmailThreadId, 'metadata');
-  const messages = thread.messages || [];
-  if (!messages.length) return;
+  const allMessages = thread.messages || [];
+  if (!allMessages.length) return;
+
+  // El sync incremental (listHistory) trae "messageAdded" tal cual, sin filtrar por label
+  // — a diferencia de la búsqueda del re-scan completo (RESCAN_QUERY), que ya excluye
+  // Spam/Papelera solo. Acá es donde hace falta el filtro real: se ignoran los mensajes
+  // que Gmail marcó Spam o Papelera. Si el hilo entero queda así (ej. se movió a Spam
+  // DESPUÉS de haberse sincronizado como consulta real), se borra la fila existente —
+  // desaparece del panel, igual que en Gmail.
+  const messages = allMessages.filter((m) => !m.labelIds?.some((l) => l === 'SPAM' || l === 'TRASH'));
+  if (!messages.length) {
+    await env.DB.prepare('DELETE FROM mail_threads WHERE gmail_thread_id = ?').bind(gmailThreadId).run();
+    return;
+  }
 
   const mine = myEmail.toLowerCase();
   const parsed = messages.map(parseMessage);
