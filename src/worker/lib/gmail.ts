@@ -29,6 +29,9 @@ export type MailAccountRow = {
   last_error: string | null;
   /** Marca del backfill de spam de una sola vez (ver migración 0026 y syncGmail). */
   spam_backfilled_at: string | null;
+  /** Último mail_threads.id ya revisado por el backfill (ver migración 0027) — permite
+   *  partirlo en tandas de a poco entre ticks del cron. */
+  spam_backfill_cursor: number | null;
 };
 
 export type MailThreadRow = {
@@ -413,27 +416,44 @@ export async function sendNewMessage(env: Env, opts: {
 
 // ── Sync incremental (llamado desde el cron de 1 min, ver scheduled() en index.ts) ──
 
-/** Backfill de una sola vez (ver migración 0026): re-revisa los hilos YA guardados en
- *  `mail_threads` contra Gmail y borra los que resulten Spam/Papelera — limpia lo que el
- *  sync incremental dejó pasar antes del fix de syncOneThread (2026-09-22). El sync normal
- *  (listHistory) no vuelve a tocar un hilo viejo sin actividad nueva, así que sin esto los
- *  hilos de spam que ya estaban sincronizados se quedarían ahí para siempre. Tolera fallos
- *  por hilo (igual que el loop de syncGmail) y se marca hecho pase lo que pase, para no
- *  reintentar en cada tick si un hilo puntual falla siempre.
- */
-async function backfillSpam(env: Env, myEmail: string): Promise<void> {
-  const rows = await env.DB.prepare('SELECT gmail_thread_id FROM mail_threads').all<{ gmail_thread_id: string }>();
-  for (const { gmail_thread_id } of rows.results) {
-    try { await syncOneThread(env, gmail_thread_id, myEmail); }
-    catch (e) { console.error('backfillSpam', gmail_thread_id, e); }
+// Cuántos hilos revisa el backfill por tick del cron (1/min). Cloudflare corta una
+// invocación que pasa cierto número de subrequests (fetch/D1) — cada hilo revisado es
+// ~1 subrequest a Gmail, así que un batch chico deja margen de sobra para el resto de
+// syncGmail en el mismo tick. Con esto, 86 hilos existentes tardan ~6 ticks en terminar.
+const SPAM_BACKFILL_BATCH = 15;
+
+/** Backfill de una sola vez, EN TANDAS (ver migraciones 0026/0027): re-revisa los hilos YA
+ *  guardados en `mail_threads` contra Gmail y borra los que resulten Spam/Papelera — limpia
+ *  lo que el sync incremental dejó pasar antes del fix de syncOneThread (2026-09-22). El
+ *  sync normal (listHistory) no vuelve a tocar un hilo viejo sin actividad nueva, así que
+ *  sin esto los hilos de spam que ya estaban sincronizados se quedarían ahí para siempre.
+ *  Tolera fallos por hilo (igual que el loop de syncGmail) y avanza el cursor pase lo que
+ *  pase, para no trabarse repitiendo el mismo hilo si uno puntual falla siempre. */
+async function backfillSpam(env: Env, myEmail: string, afterId: number): Promise<void> {
+  const rows = await env.DB
+    .prepare('SELECT id, gmail_thread_id FROM mail_threads WHERE id > ? ORDER BY id LIMIT ?')
+    .bind(afterId, SPAM_BACKFILL_BATCH)
+    .all<{ id: number; gmail_thread_id: string }>();
+  let lastId = afterId;
+  for (const row of rows.results) {
+    try { await syncOneThread(env, row.gmail_thread_id, myEmail); }
+    catch (e) { console.error('backfillSpam', row.gmail_thread_id, e); }
+    lastId = row.id;
   }
-  await env.DB.prepare("UPDATE mail_account SET spam_backfilled_at = datetime('now') WHERE id = 1").run();
+  const done = rows.results.length < SPAM_BACKFILL_BATCH; // esta tanda no se llenó → no queda nada más
+  await env.DB.prepare(
+    `UPDATE mail_account SET spam_backfill_cursor = ?, spam_backfilled_at = ${done ? "datetime('now')" : 'spam_backfilled_at'} WHERE id = 1`,
+  ).bind(lastId).run();
 }
 
 export async function syncGmail(env: Env): Promise<void> {
   const account = await getMailAccount(env);
   if (!account) return; // no conectada todavía
-  if (!account.spam_backfilled_at) await backfillSpam(env, account.email);
+  // Si ya sabemos que hace falta reconectar (último error guardado), ni lo intenta: cada
+  // hilo del backfill fallaría igual pegándole a Google por gusto (ver getAccessToken).
+  if (!account.spam_backfilled_at && !accountNeedsReconnect(account)) {
+    await backfillSpam(env, account.email, account.spam_backfill_cursor ?? 0);
+  }
 
   try {
     let threadIds: string[];
