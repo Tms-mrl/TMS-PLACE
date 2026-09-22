@@ -1,4 +1,4 @@
-import { quoteForRange, rangeNights } from './season-price';
+import { quoteForRange, rangeNights, roundPrice } from './season-price';
 import type { Property } from './types';
 
 // Armador del bloque "Compartir": nació adentro de `shareProps` (properties-panel.tsx,
@@ -27,15 +27,6 @@ function dayRangeLabel(from: string, to: string): string {
   const d1 = `${start.getDate()}/${start.getMonth() + 1}`;
   const d2 = `${end.getDate()}/${end.getMonth() + 1}`;
   return d1 === d2 ? `El ${d1}` : `Del ${d1} al ${d2}`;
-}
-
-/** Redondeo "lindo" para el precio del mensaje (acordado con el usuario, 2026-09-14):
- *  primero se pierde todo lo que esté debajo de los $1.000 (trunca), y ese resto en
- *  miles siempre sube al múltiplo de 50 más cercano — o sea, redondea para arriba a
- *  los $50.000. Ej: 1.049.001 → 1.050.000 · 1.051.000 → 1.100.000 · 1.050.500 → 1.050.000. */
-function roundPrice(amount: number): number {
-  const thousands = Math.floor(amount / 1000);
-  return Math.ceil(thousands / 50) * 50 * 1000;
 }
 
 export function shareBlock(p: ShareableProperty, from?: string, to?: string): string {

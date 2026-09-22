@@ -6,6 +6,22 @@ function parseRows(seasonJson: string | null | undefined): SeasonPrice[] {
   try { return JSON.parse(seasonJson || '[]') as SeasonPrice[]; } catch { return []; }
 }
 
+/** Redondeo "lindo" para un precio COTIZADO (calculado, no cargado a mano — acordado con
+ *  el usuario, 2026-09-14, al principio solo para el mensaje de "Compartir"; sumado acá
+ *  2026-09-22 para que la tarjeta del Inventario muestre lo mismo): primero se pierde todo
+ *  lo que esté debajo de los $1.000 (trunca), y ese resto en miles siempre sube al múltiplo
+ *  de 50 más cercano — o sea, redondea para arriba a los $50.000.
+ *  Ej: 1.049.001 → 1.050.000 · 1.051.000 → 1.100.000 · 1.050.500 → 1.050.000 ·
+ *      1.542.857,14 (prorrateo de semana) → 1.550.000.
+ *  Solo se aplica a precios COTIZADOS (`quoteForRange`, ej. semana ÷ 7 × N con decimales);
+ *  una tarifa cargada tal cual (día/semana/quincena/mes de `nearestRate`) o el precio fijo
+ *  de la propiedad se muestran exactos, nunca redondeados — son números que el usuario
+ *  escribió a mano, no calculados. */
+export function roundPrice(amount: number): number {
+  const thousands = Math.floor(amount / 1000);
+  return Math.ceil(thousands / 50) * 50 * 1000;
+}
+
 /** Días del rango [from, to] (YYYY-MM-DD), inclusive → "del 1 al 4" = 4. `null` si las
  *  fechas no parsean o `to` < `from`. La usa `quoteForRange` y el label "N días x $..."
  *  del mensaje de "Compartir" (`properties-panel.tsx`). */
@@ -146,7 +162,10 @@ export function seasonDisplay(seasonJson: string | null | undefined, from: strin
   if (!parseRows(seasonJson).length) return null;
   if (from) {
     const amount = quoteForRange(seasonJson, from, to);
-    return amount != null ? { kind: 'quote', amount } : { kind: 'none' };
+    // Redondeado acá (no dentro de quoteForRange): la cotización cruda la siguen usando
+    // el filtro "Con precio" (solo mira si hay tarifa, != null) y el orden por precio, a
+    // los que no les importa el redondeo. Lo que se muestra en pantalla sí va redondeado.
+    return amount != null ? { kind: 'quote', amount: roundPrice(amount) } : { kind: 'none' };
   }
   const n = nearestRate(seasonJson, today);
   return n ? { kind: 'nearest', ...n } : { kind: 'none' };
