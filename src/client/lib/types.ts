@@ -12,6 +12,8 @@ export type MailThread = {
   subject: string | null; snippet: string | null; last_message_id: string | null;
   last_from_me: number; received_at: string | null; branch_id: number | null; branch_name: string | null;
   status: 'nuevo' | 'pendiente' | 'respondido' | 'archivado'; unread: number; assigned_at: string | null;
+  /** Asignado a alguien del equipo (ej. "esto es para Nico") — distinto de la sucursal. */
+  assigned_user_id: number | null; assigned_user_name: string | null; assigned_user_email: string | null;
 };
 
 /** Mensaje de un hilo, traído de Gmail en vivo (GET /api/correo/threads/:id). `bodyHtml`

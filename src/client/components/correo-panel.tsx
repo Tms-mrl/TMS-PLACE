@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ChevronDown, ChevronRight, Mail, Paperclip, Pencil, RefreshCw } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, Mail, Paperclip, Pencil, RefreshCw } from 'lucide-react';
 import { api } from '../lib/api';
 import { toast } from '../lib/toast';
-import type { Branch, MailMessage, MailStatus, MailThread, Property } from '../lib/types';
+import type { Branch, MailMessage, MailStatus, MailThread, Member, Property } from '../lib/types';
 import { usePoll } from '../lib/use-poll';
 import { shareBlocks } from '../lib/share-block';
 import { DateRangePicker } from './properties-panel';
@@ -51,7 +51,13 @@ export function CorreoPanel({ branches, myBranchId, onStartAttach, attachResult,
   const [openId, setOpenId] = useState<number | null>(null);
   const [fStatus, setFStatus] = useState(ALL);
   const [fBranch, setFBranch] = useState<'all' | 'mine'>('all');
+  const [fUnread, setFUnread] = useState(false);
+  // Los archivados quedan afuera de la vista por defecto (mismo criterio que "Ver
+  // archivadas" en Inventario) — este toggle los revela.
+  const [fArchived, setFArchived] = useState(false);
   const [q, setQ] = useState('');
+  const [page, setPage] = useState(0);
+  const [members, setMembers] = useState<Member[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [composing, setComposing] = useState(false);
   const autoSynced = useRef(false);
@@ -84,7 +90,12 @@ export function CorreoPanel({ branches, myBranchId, onStartAttach, attachResult,
     }
   }
   useEffect(() => { loadStatus(); }, []);
+  // Para el <Select> de "Asignar a" (ThreadDetail) — mismo endpoint que la pestaña
+  // Equipo, fetcheado acá aparte (no se levanta a AgencyWorkspace: hoy solo lo
+  // consumen 2 paneles, no justifica sumar un prop más a todos los hermanos).
+  useEffect(() => { api<{ members: Member[] }>('/api/agencies/members').then((r) => setMembers(r.members)).catch(() => {}); }, []);
   useEffect(() => { if (status?.connected) loadThreads(); }, [status?.connected, fStatus, fBranch]);
+  useEffect(() => { setPage(0); }, [fStatus, fBranch, fUnread, fArchived, q]);
   useEffect(() => {
     if (status?.connected && !status.lastSyncAt && !autoSynced.current) { autoSynced.current = true; syncNow(); }
   }, [status?.connected, status?.lastSyncAt]);
@@ -120,6 +131,7 @@ export function CorreoPanel({ branches, myBranchId, onStartAttach, attachResult,
       <ThreadDetail
         id={openId}
         branches={branches}
+        members={members}
         cache={threadCache.current}
         onBack={() => { setOpenId(null); loadThreads(); loadStatus(); }}
         onStartAttach={onStartAttach}
@@ -146,10 +158,22 @@ export function CorreoPanel({ branches, myBranchId, onStartAttach, attachResult,
     );
   }
 
+  const PAGE_SIZE = 20;
   const needle = q.trim().toLowerCase();
-  const filtered = needle
-    ? threads.filter((t) => [t.subject, t.from_name, t.from_addr, t.snippet].filter(Boolean).some((s) => s!.toLowerCase().includes(needle)))
-    : threads;
+  // Los archivados se ocultan por defecto salvo que el usuario ya haya elegido
+  // explícitamente ese estado en el filtro de arriba (ahí gana lo que pidió).
+  const hideArchived = fStatus !== 'archivado' && !fArchived;
+  const filtered = threads.filter((t) => {
+    if (hideArchived && t.status === 'archivado') return false;
+    if (fUnread && !t.unread) return false;
+    if (needle && ![t.subject, t.from_name, t.from_addr, t.snippet].filter(Boolean).some((s) => s!.toLowerCase().includes(needle))) return false;
+    return true;
+  });
+  const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, pages - 1);
+  const pageRows = filtered.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+  const shownFrom = filtered.length ? safePage * PAGE_SIZE + 1 : 0;
+  const shownTo = Math.min(filtered.length, (safePage + 1) * PAGE_SIZE);
 
   return (
     <div>
@@ -180,6 +204,12 @@ export function CorreoPanel({ branches, myBranchId, onStartAttach, attachResult,
             </SelectContent>
           </Select>
         )}
+        <Button variant={fUnread ? 'secondary' : 'outline'} size="sm" onClick={() => setFUnread((v) => !v)}>
+          {fUnread ? 'Viendo solo no leídos' : 'Solo no leídos'}
+        </Button>
+        <Button variant={fArchived ? 'secondary' : 'outline'} size="sm" onClick={() => setFArchived((v) => !v)}>
+          {fArchived ? 'Viendo archivadas' : 'Ver archivadas'}
+        </Button>
         <input placeholder="Buscar…" value={q} onChange={(e) => setQ(e.target.value)} style={{ flex: '1 1 200px' }} />
         <Button variant="outline" size="sm" onClick={() => setComposing(true)}>
           <Pencil className="h-4 w-4" />Redactar
@@ -187,6 +217,11 @@ export function CorreoPanel({ branches, myBranchId, onStartAttach, attachResult,
         <Button variant="ghost" size="icon" title="Buscar mensajes nuevos en Gmail" onClick={syncNow} disabled={syncing}>
           <RefreshCw className={syncing ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
         </Button>
+        <div className="ppager">
+          <span className="ppager-count">{shownFrom}-{shownTo} de {filtered.length}</span>
+          <button type="button" className="ppager-btn" onClick={() => setPage((n) => Math.max(0, n - 1))} disabled={safePage === 0} aria-label="Página anterior"><ChevronLeft className="h-4 w-4" /></button>
+          <button type="button" className="ppager-btn" onClick={() => setPage((n) => Math.min(pages - 1, n + 1))} disabled={safePage >= pages - 1} aria-label="Página siguiente"><ChevronRight className="h-4 w-4" /></button>
+        </div>
       </div>
       {filtered.length === 0 ? (
         <p className="muted">
@@ -196,34 +231,45 @@ export function CorreoPanel({ branches, myBranchId, onStartAttach, attachResult,
           )}
         </p>
       ) : (
-        <div className="client-list">
-          {filtered.map((t) => {
-            // Como en Gmail: abrir el hilo lo saca de negrita al toque (el server lo
-            // marca leído en el mismo GET /threads/:id, esto es solo para no esperar
-            // el round-trip). `openThread` hace las dos cosas juntas.
-            const openThread = () => {
-              setThreads((ts) => ts.map((x) => (x.id === t.id ? { ...x, unread: 0 } : x)));
-              setOpenId(t.id);
-            };
-            return (
-              <div
-                className={`client-card mail-row${t.unread ? ' is-unread' : ''}`} key={t.id} role="button" tabIndex={0} style={{ cursor: 'pointer' }}
-                onClick={openThread}
-                onKeyDown={(e) => { if (e.key === 'Enter') openThread(); }}
-              >
-                <div className="client-main">
-                  <div className="client-name">
-                    {t.from_name || t.from_addr || '(sin remitente)'}{' '}
-                    <span className={STATUS_CHIP[t.status]}>{STATUS_LABEL[t.status]}</span>
-                    {t.branch_name && <span className="chip">🏢 {t.branch_name}</span>}
+        <>
+          <div className="client-list">
+            {pageRows.map((t) => {
+              // Como en Gmail: abrir el hilo lo saca de negrita al toque (el server lo
+              // marca leído en el mismo GET /threads/:id, esto es solo para no esperar
+              // el round-trip). `openThread` hace las dos cosas juntas.
+              const openThread = () => {
+                setThreads((ts) => ts.map((x) => (x.id === t.id ? { ...x, unread: 0 } : x)));
+                setOpenId(t.id);
+              };
+              return (
+                <div
+                  className={`client-card mail-row${t.unread ? ' is-unread' : ''}`} key={t.id} role="button" tabIndex={0} style={{ cursor: 'pointer' }}
+                  onClick={openThread}
+                  onKeyDown={(e) => { if (e.key === 'Enter') openThread(); }}
+                >
+                  <div className="client-main">
+                    <div className="client-name">
+                      {t.from_name || t.from_addr || '(sin remitente)'}{' '}
+                      <span className={STATUS_CHIP[t.status]}>{STATUS_LABEL[t.status]}</span>
+                      {(t.assigned_user_name || t.assigned_user_email) && <span className="chip">👤 {t.assigned_user_name || t.assigned_user_email}</span>}
+                      {t.branch_name && <span className="chip">🏢 {t.branch_name}</span>}
+                    </div>
+                    <div className="small mail-subject">{t.subject || '(sin asunto)'}</div>
+                    <div className="muted small">{t.snippet}</div>
                   </div>
-                  <div className="small mail-subject">{t.subject || '(sin asunto)'}</div>
-                  <div className="muted small">{t.snippet}{t.received_at ? ` · ${fmt(t.received_at)}` : ''}</div>
+                  {t.received_at && <div className={`mail-row-date${t.unread ? ' is-unread' : ''}`}>{fmt(t.received_at)}</div>}
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+          <div className="row" style={{ marginTop: 14 }}>
+            <div className="ppager">
+              <span className="ppager-count">{shownFrom}-{shownTo} de {filtered.length}</span>
+              <button type="button" className="ppager-btn" onClick={() => setPage((n) => Math.max(0, n - 1))} disabled={safePage === 0} aria-label="Página anterior"><ChevronLeft className="h-4 w-4" /></button>
+              <button type="button" className="ppager-btn" onClick={() => setPage((n) => Math.min(pages - 1, n + 1))} disabled={safePage >= pages - 1} aria-label="Página siguiente"><ChevronRight className="h-4 w-4" /></button>
+            </div>
+          </div>
+        </>
       )}
       {composing && (
         <ComposeModal
@@ -352,8 +398,8 @@ function HtmlMail({ html }: { html: string }) {
   );
 }
 
-function ThreadDetail({ id, branches, cache, onBack, onStartAttach, attachResult, onConsumeAttachResult }: {
-  id: number; branches: Branch[];
+function ThreadDetail({ id, branches, members, cache, onBack, onStartAttach, attachResult, onConsumeAttachResult }: {
+  id: number; branches: Branch[]; members: Member[];
   /** Caché de hilos ya resueltos (ver CorreoPanel), precargados en 2º plano o de una
    *  apertura anterior en esta misma sesión — abrir uno que ya está acá es instantáneo. */
   cache: Map<number, { thread: MailThread; messages: MailMessage[] }>;
@@ -451,7 +497,14 @@ function ThreadDetail({ id, branches, cache, onBack, onStartAttach, attachResult
           <h3 className="cd-title">{thread.subject || '(sin asunto)'}</h3>
           <div className="muted small">{thread.from_name ? `${thread.from_name} · ` : ''}{thread.from_addr}</div>
         </div>
-        <div className="row" style={{ gap: 8 }}>
+        <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+          <Select value={thread.assigned_user_id != null ? String(thread.assigned_user_id) : NONE} onValueChange={(v) => patch({ assigned_user_id: v === NONE ? null : Number(v) })}>
+            <SelectTrigger className="h-9 w-auto min-w-[140px]"><SelectValue placeholder="Asignar a" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NONE}>Sin asignar</SelectItem>
+              {members.map((m) => <SelectItem key={m.user_id} value={String(m.user_id)}>{m.name || m.email}</SelectItem>)}
+            </SelectContent>
+          </Select>
           <Select value={thread.branch_id != null ? String(thread.branch_id) : NONE} onValueChange={(v) => patch({ branch_id: v === NONE ? null : Number(v) })}>
             <SelectTrigger className="h-9 w-auto min-w-[140px]"><SelectValue placeholder="Sucursal" /></SelectTrigger>
             <SelectContent>
@@ -465,6 +518,9 @@ function ThreadDetail({ id, branches, cache, onBack, onStartAttach, attachResult
               {STATUSES.map((s) => <SelectItem key={s} value={s}><StatusOption status={s} /></SelectItem>)}
             </SelectContent>
           </Select>
+          <Button variant="outline" size="sm" onClick={() => patch({ unread: 1 })} title="Volver a marcarlo como no leído">
+            <Mail className="h-4 w-4" />No leído
+          </Button>
         </div>
       </div>
 

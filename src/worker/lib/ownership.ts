@@ -31,3 +31,11 @@ export async function branchInAgency(db: D1Database, agencyId: number | null, br
   const row = await db.prepare('SELECT id FROM branches WHERE id = ? AND agency_id = ?').bind(branchId, agencyId).first();
   return !!row;
 }
+
+/** ¿El usuario es miembro de la agencia? null = permitido (desasignar). */
+export async function userInAgency(db: D1Database, agencyId: number | null, userId: number | null): Promise<boolean> {
+  if (userId == null) return true;
+  if (agencyId == null) return false;
+  const row = await db.prepare('SELECT id FROM agency_members WHERE user_id = ? AND agency_id = ?').bind(userId, agencyId).first();
+  return !!row;
+}

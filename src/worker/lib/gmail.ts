@@ -47,6 +47,10 @@ export type MailThreadRow = {
   branch_id: number | null;
   status: 'nuevo' | 'pendiente' | 'respondido' | 'archivado';
   unread: number;
+  /** Asignado a alguien del equipo (ej. "esto es para Nico"), no confundir con
+   *  assigned_by/assigned_at de abajo, que son la provenance de reasignar sucursal.
+   *  Ver migración 0028. syncOneThread nunca la toca — solo se setea vía PATCH. */
+  assigned_user_id: number | null;
   assigned_by: number | null;
   assigned_at: string | null;
   created_at: string;

@@ -3,7 +3,7 @@ import type { AppEnv } from '../lib/types';
 import { bad, forbidden, notFound, num, str } from '../lib/http';
 import { getUserAgency } from '../lib/subscription';
 import { genToken, readCookie } from '../lib/auth';
-import { branchInAgency } from '../lib/ownership';
+import { branchInAgency, userInAgency } from '../lib/ownership';
 import {
   GMAIL_SCOPES, GmailNeedsReconnect, accountNeedsReconnect, disconnectMailAccount,
   gmailCallbackUrl, getAttachment, getMailAccount, getThread, parseMessage, renderableHtml,
@@ -24,7 +24,11 @@ const STATE_COOKIE = 'gmail_oauth_state';
 const STATUSES = ['nuevo', 'pendiente', 'respondido', 'archivado'];
 
 function threadSelect(extraWhere = ''): string {
-  return `SELECT t.*, b.name AS branch_name FROM mail_threads t LEFT JOIN branches b ON b.id = t.branch_id ${extraWhere}`;
+  return `SELECT t.*, b.name AS branch_name, au.name AS assigned_user_name, au.email AS assigned_user_email
+          FROM mail_threads t
+          LEFT JOIN branches b ON b.id = t.branch_id
+          LEFT JOIN users au ON au.id = t.assigned_user_id
+          ${extraWhere}`;
 }
 
 // ── Estado de la conexión (para el panel + el badge de pendientes) ─────────────────
@@ -178,7 +182,7 @@ correo.get('/threads/:id', async (c) => {
   // hilos de la lista para que abrirlos se sienta instantáneo) — trae el contenido
   // igual que una apertura real, pero no cuenta como que alguien lo leyó.
   const peek = c.req.query('peek') === '1';
-  const row = await c.env.DB.prepare(threadSelect('WHERE t.id = ?')).bind(id).first<MailThreadRow & { branch_name: string | null }>();
+  const row = await c.env.DB.prepare(threadSelect('WHERE t.id = ?')).bind(id).first<MailThreadRow & { branch_name: string | null; assigned_user_name: string | null; assigned_user_email: string | null }>();
   if (!row) return notFound(c, 'Hilo no encontrado');
   try {
     const thread = await getThread(c.env, row.gmail_thread_id, 'full');
@@ -244,6 +248,14 @@ correo.patch('/threads/:id', async (c) => {
   if ('unread' in body) {
     sets.push('unread = ?');
     binds.push(body.unread ? 1 : 0);
+  }
+  // Asignar el hilo a alguien del equipo (ej. "esto es para Nico") — distinto de
+  // branch_id/assigned_by de arriba, que son la sucursal y quién la reasignó.
+  if ('assigned_user_id' in body) {
+    const assignedUserId = num(body.assigned_user_id);
+    if (!(await userInAgency(c.env.DB, mine.agency.id, assignedUserId))) return bad(c, 'Usuario inválido');
+    sets.push('assigned_user_id = ?');
+    binds.push(assignedUserId);
   }
   if (!sets.length) return bad(c, 'Nada para actualizar');
   sets.push("updated_at = datetime('now')");
