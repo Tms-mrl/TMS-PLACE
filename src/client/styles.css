@@ -637,6 +637,16 @@ input, select, textarea { color: var(--fg); }
 .mail-row.is-unread .client-name { font-weight: 700; }
 .mail-row.is-unread .mail-subject { font-weight: 700; color: var(--fg); }
 .mail-preview { margin-top: 10px; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+/* Caja de "Responder": un <textarea> suelto (no dentro de .form/.fld) se queda sin borde
+   por el reset de Tailwind y sin ancho propio (cae al ancho nativo de ~20 columnas) — se
+   veía como una cajita angosta y casi invisible flotando en la tarjeta "Responder", que es
+   mucho más ancha. Reusa el mismo lenguaje visual que .fld textarea (borde + fondo --bg)
+   pero le suma max-width: none (el .fld normal se queda en 100% del contenedor angosto de
+   un modal; acá el contenedor es la tarjeta ancha de "Responder", así que ocupa todo eso). */
+.mail-reply-textarea {
+  display: block; width: 100%; max-width: none; padding: 11px 13px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--bg); color: var(--fg); font: inherit; font-size: 15px;
+}
 .mail-preview pre { margin: 4px 0 0; white-space: pre-wrap; font-family: inherit; font-size: 13px; }
 
 /* ══════════════════════════════════════════════════════════════════════════════

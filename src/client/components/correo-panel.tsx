@@ -507,7 +507,7 @@ function ThreadDetail({ id, branches, cache, onBack, onStartAttach, attachResult
 
       <div className="panel-lite" style={{ marginTop: 16 }} ref={replyBoxRef}>
         <h4>Responder</h4>
-        <textarea rows={4} placeholder="Escribí la respuesta…" value={replyText} onChange={(e) => setReplyText(e.target.value)} />
+        <textarea className="mail-reply-textarea" rows={4} placeholder="Escribí la respuesta…" value={replyText} onChange={(e) => setReplyText(e.target.value)} />
         <div className="row" style={{ gap: 10, marginTop: 10, flexWrap: 'wrap', alignItems: 'center' }}>
           <Button variant="outline" size="sm" onClick={onStartAttach} title="Te lleva al Inventario para elegir">
             <Paperclip className="h-4 w-4" />Adjuntar propiedades{attached.length ? ` (${attached.length})` : ''}
