@@ -435,9 +435,6 @@ export function PropertiesPanel({ branches, onChanged, preset, mailAttach, onSen
         <input type="number" min={1} placeholder="Pers." title="Ordena por capacidad: primero las de esa cantidad y las más grandes. No oculta ninguna." value={f.capacity} onChange={(e) => set('capacity', e.target.value)} style={{ maxWidth: 74 }} />
         <DateRangePicker from={f.dateFrom} to={f.dateTo} onChange={(dateFrom, dateTo) => setF((s) => ({ ...s, dateFrom, dateTo }))} onDone={load} />
       </div>
-      {/* Barra de acciones masivas: desactivada por ahora (ver docs/ideas.md → "Barra de acciones
-          masivas"). Para reactivarla, descomentar este bloque; los handlers (bulkShare,
-          bulkSendToMail, bulkPatch, bulkDelete) siguen definidos arriba.
       <div className={selected.size > 0 ? 'bulk-bar-wrap open' : 'bulk-bar-wrap'}>
         <div className="bulk-bar-inner">
           <div className="bulk-bar">
@@ -468,7 +465,6 @@ export function PropertiesPanel({ branches, onChanged, preset, mailAttach, onSen
           </div>
         </div>
       </div>
-      */}
       <div className="pbar">
         <label className="chk-all">
           <input type="checkbox" checked={allSel} onChange={toggleAll} />

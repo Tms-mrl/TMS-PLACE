@@ -378,11 +378,12 @@ falta. Si se decide sacarla, tocar esos dos archivos (la barra en el JSX de
 `property-row.tsx` y, si no queda usada en ningún otro lado, borrar
 `completeness.ts` entero — confirmar antes con un grep de `completeness`).
 
-## Barra de acciones masivas del Inventario — desactivada (2026-09-20)
+## Barra de acciones masivas del Inventario — ✅ reactivada (2026-09-25)
 
-Tomy pidió sacarla de la vista por ahora ("no la necesito por el momento"), **sin
-borrar el código**: está comentada en `properties-panel.tsx` (bloque `{/* … */}`
-justo antes de `<div className="pbar">`, con un comentario que apunta a esta nota).
+Desactivada el 2026-09-20 a pedido de Tomy ("no la necesito por el momento", sin
+borrar el código — quedó comentada en `properties-panel.tsx`). Reactivada de
+nuevo el 2026-09-25 a pedido explícito ("reactivala"): se sacó el comentario que
+envolvía el bloque, sin tocar nada del contenido ni de los handlers.
 
 Es la barra oscura que aparecía arriba de la lista al tildar propiedades
 (`.bulk-bar-wrap` / `.bulk-bar` en `styles.css`): "N seleccionadas", "Seleccionar
