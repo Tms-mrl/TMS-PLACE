@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
+import { createTabNav } from '../lib/back-nav';
 import { useVisited } from '../lib/use-visited';
 import type { Agency, User } from '../lib/types';
 import { AgencyWorkspace, type Tab as AgencyTab } from './agency-workspace';
@@ -12,7 +13,11 @@ export function Dashboard({ user, brandName, logoUrl, onLogout }: { user: User; 
   const [agency, setAgency] = useState<Agency | null>(user.roles.agency);
   const [loaded, setLoaded] = useState(false);
   const [nonAgencyView, setNonAgencyView] = useState<NonAgencyView>('guardados');
-  const [agencyTab, setAgencyTab] = useState<AgencyTab>('resumen');
+  const [agencyTab, setAgencyTabRaw] = useState<AgencyTab>('resumen');
+
+  // Cambiar de pestaña deja una capa de "atrás" con la pestaña anterior (ver lib/back-nav.ts):
+  // el botón de retroceso del celu vuelve a ella en vez de cerrar la app.
+  const [setAgencyTab] = useState(() => createTabNav<AgencyTab>('resumen', setAgencyTabRaw));
 
   useEffect(() => {
     api<{ agency: Agency | null; role: string | null }>('/api/agencies/mine')

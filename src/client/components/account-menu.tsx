@@ -3,6 +3,7 @@ import { ChevronDown, Heart, LogOut, Settings } from 'lucide-react';
 import { api } from '../lib/api';
 import type { Agency, User } from '../lib/types';
 import { toast } from '../lib/toast';
+import { useBackLayer } from '../lib/back-nav';
 import { Button } from './ui/button';
 import { useConfirm } from './ui/use-confirm';
 import { InstallAppCard } from './install-app';
@@ -15,6 +16,7 @@ export function AccountMenu({ user, onLogout, onFavorites, onSettings }: {
   user: User; onLogout: () => void; onFavorites?: () => void; onSettings: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  useBackLayer(open, () => setOpen(false)); // "atrás" del celu cierra el menú
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

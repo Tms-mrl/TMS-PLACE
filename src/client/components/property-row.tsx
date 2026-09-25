@@ -12,6 +12,7 @@ import { publicLink } from '../lib/share-block';
 import { AMENITIES, parseAmenities } from '../lib/amenities';
 import { completeness, completenessHint, completenessTone } from '../lib/completeness';
 import { toast } from '../lib/toast';
+import { useBackLayer } from '../lib/back-nav';
 import { useConfirm } from './ui/use-confirm';
 
 const AMEN_MAP = new Map(AMENITIES.map((a) => [a.key, a]));
@@ -34,6 +35,7 @@ export function StatusChip({ status }: { status: string }) {
 // (el onClick del contenedor: los ítems son <button>).
 function RowMenu({ label, icon, children }: { label: string; icon: ReactNode; children: ReactNode }) {
   const [open, setOpen] = useState(false);
+  useBackLayer(open, () => setOpen(false)); // "atrás" del celu cierra el menú
   const ref = useRef<HTMLDivElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
   useEffect(() => {

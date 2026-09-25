@@ -4,6 +4,7 @@ import { api, upload } from '../lib/api';
 import { mediaUrl, PRICE_PERIODS, PROPERTY_KINDS, type Branch, type Media, type Property } from '../lib/types';
 import { AMENITIES, parseAmenities } from '../lib/amenities';
 import { toast } from '../lib/toast';
+import { useBackLayer } from '../lib/back-nav';
 import { LocationPicker } from './location-picker';
 import { Button } from './ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
@@ -57,6 +58,7 @@ async function downscale(file: File, max = 1600, quality = 0.82): Promise<Blob> 
 }
 
 export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  useBackLayer(true, onClose); // el "atrás" del celu cierra el modal en vez de salir de la app
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>

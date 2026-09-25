@@ -67,6 +67,9 @@ export function AgencyWorkspace({ agency, user, onLogout, tab, setTab }: {
   const [mailAttaching, setMailAttaching] = useState(false);
   const [mailAttachResult, setMailAttachResult] = useState<Property[] | null>(null);
   const visited = useVisited(tab);
+  // Salir de Propiedades sin elegir (click en otra pestaña, o el "atrás" del celu, que
+  // vuelve a la pestaña anterior sin pasar por el onClick de arriba) cancela el modo adjuntar.
+  useEffect(() => { if (mailAttaching && tab !== 'propiedades') setMailAttaching(false); }, [tab, mailAttaching]);
 
   function startMailAttach() { setMailAttaching(true); setPreset(undefined); setTab('propiedades'); }
   function finishMailAttach(list: Property[]) { setMailAttachResult(list); setMailAttaching(false); setTab('correo'); }

@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from 'react';
+import { useBackLayer } from '../../lib/back-nav';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -31,6 +32,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
     resolver.current?.(result);
     resolver.current = undefined;
   }
+  useBackLayer(!!state, () => close(false)); // "atrás" del celu = Cancelar
 
   return (
     <ConfirmContext.Provider value={confirm}>

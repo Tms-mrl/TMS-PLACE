@@ -11,6 +11,7 @@ import { shareBlocks } from '../lib/share-block';
 import { toast } from '../lib/toast';
 import { prefetchClients } from '../lib/clients-cache';
 import { usePoll } from '../lib/use-poll';
+import { useBackLayer } from '../lib/back-nav';
 import { CalendarModal } from './calendar-modal';
 import { PhotoManager, PropertyForm } from './property-form';
 import { PropertyRow } from './property-row';
@@ -45,6 +46,7 @@ const fmtShort = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
 // de reservas), para reemplazar el par de <input type=date> del filtro de Inventario.
 export function DateRangePicker({ from, to, onChange, onDone }: { from: string; to: string; onChange: (from: string, to: string) => void; onDone?: () => void }) {
   const [open, setOpen] = useState(false);
+  useBackLayer(open, () => setOpen(false)); // "atrás" del celu cierra el almanaque
   const ref = useRef<HTMLDivElement>(null);
   const now = new Date();
   const [ym, setYm] = useState({ y: now.getFullYear(), m: now.getMonth() });
@@ -114,6 +116,7 @@ function Lightbox({ media, onClose }: { media: Media[]; onClose: () => void }) {
   const [i, setI] = useState(0);
   const n = media.length;
   const at = ((i % n) + n) % n;
+  useBackLayer(true, onClose); // "atrás" del celu cierra el visor
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -450,8 +453,8 @@ export function PropertiesPanel({ branches, onChanged, preset, mailAttach, onSen
               <Button size="sm" variant="secondary" onClick={bulkShare}><Share2 className="h-4 w-4" />Compartir por WhatsApp</Button>
             )}
             <Button size="sm" variant="secondary" onClick={() => bulkPatch({ published: true })}>Publicar</Button>
-            <Button size="sm" variant="outline" onClick={() => bulkPatch({ published: false })}>Despublicar</Button>
-            <Button size="sm" variant="outline" onClick={() => bulkPatch({ status: 'vendida' })}>Marcar como vendida</Button>
+            {/* <Button size="sm" variant="outline" onClick={() => bulkPatch({ published: false })}>Despublicar</Button> */}
+            {/* <Button size="sm" variant="outline" onClick={() => bulkPatch({ status: 'vendida' })}>Marcar como vendida</Button> */}
             <Select value={ALL} onValueChange={(v) => { if (v === NONE) bulkPatch({ branch_id: null }); else if (v !== ALL) bulkPatch({ branch_id: Number(v) }); }}>
               <SelectTrigger className="h-8 w-auto min-w-[150px] text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -461,7 +464,7 @@ export function PropertiesPanel({ branches, onChanged, preset, mailAttach, onSen
               </SelectContent>
             </Select>
             <Button size="sm" variant="destructive" onClick={bulkDelete}>Eliminar</Button>
-            <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>Cancelar</Button>
+            <Button size="sm" variant="secondary" onClick={() => setSelected(new Set())}>Cancelar</Button>
           </div>
         </div>
       </div>

@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { toast } from '../lib/toast';
 import type { Branch, MailMessage, MailStatus, MailThread, Member, Property } from '../lib/types';
 import { usePoll } from '../lib/use-poll';
+import { useBackLayer } from '../lib/back-nav';
 import { shareBlocks } from '../lib/share-block';
 import { DateRangePicker } from './properties-panel';
 import { Modal } from './property-form';
@@ -126,6 +127,10 @@ export function CorreoPanel({ branches, myBranchId, onStartAttach, attachResult,
     })();
   }, [threads, openId]);
 
+  // Volver del hilo a la lista: lo hace el botón "Volver" y también el "atrás" del celu.
+  const closeThread = () => { setOpenId(null); loadThreads(); loadStatus(); };
+  useBackLayer(openId != null, closeThread);
+
   if (openId != null) {
     return (
       <ThreadDetail
@@ -133,7 +138,7 @@ export function CorreoPanel({ branches, myBranchId, onStartAttach, attachResult,
         branches={branches}
         members={members}
         cache={threadCache.current}
-        onBack={() => { setOpenId(null); loadThreads(); loadStatus(); }}
+        onBack={closeThread}
         onStartAttach={onStartAttach}
         attachResult={attachResult}
         onConsumeAttachResult={onConsumeAttachResult}
