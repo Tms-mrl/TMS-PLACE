@@ -57,6 +57,51 @@ function splitByMonth(from: Date, checkout: Date): { start: Date; endExclusive: 
   return segments;
 }
 
+/** Día en que ENTRA la 2ª quincena, por mes. Por defecto el 16; febrero es la excepción: la
+ *  1ª sale el 15 y la 2ª entra ese mismo 15 (acordado con el dueño, 2026-09-25 — es una tabla
+ *  a propósito: si cambia una fecha, se edita acá y listo). */
+const Q2_IN_DAY: Partial<Record<number, number>> = { 2: 15 };
+
+/** Calendario de "paquetes" del dueño para un mes: cada período es una tarifa de `SeasonPrice`
+ *  con fecha de entrada y de salida FIJAS (la salida es el día que se van ~10am, no se cobra
+ *  como noche). Todos los meses siguen el patrón de enero — mes 1→último día · 1ª quincena
+ *  1→15 · 2ª quincena 16→último día — con la excepción de `Q2_IN_DAY`. El dueño dictó dic (2ª
+ *  16→31), ene, feb y mar (1ª 1→15); el resto de los meses se asumió por el mismo patrón.
+ *  "Último día" se calcula (feb 2027 = 28; en bisiesto sería 29, no confirmado).
+ *  Orden = prioridad: el mes va primero (feb 1→1/3 es "mes + 1 día", no 1ª + 2ª quincena). */
+function periodsOf(y: number, month: number) {
+  const m0 = month - 1;
+  const at = (day: number) => new Date(y, m0, day);
+  const last = new Date(y, m0 + 1, 0);
+  return [
+    { field: 'price_month', start: at(1), out: last },
+    { field: 'price_fortnight_q1', start: at(1), out: at(15) },
+    { field: 'price_fortnight_q2', start: at(Q2_IN_DAY[month] ?? 16), out: last },
+  ] as const;
+}
+
+/** Reconoce si el tramo [start, endExclusive) (que no cruza de mes) es un período de
+ *  `periodsOf` — entra en su fecha de entrada, sale en la de salida — y devuelve su precio,
+ *  sin importar cuántas noches sean. Si el tramo es un período + 1 día más hasta el 1° del
+ *  mes siguiente (ej. 1/2 al 1/3 con el mes de febrero 1→28, o 16/1 al 1/2 con la 2ª quincena
+ *  16→31), suma ese día: se cobra a la tarifa por día de la 1ª quincena del mes SIGUIENTE
+ *  ("1 mes + 1 día, por el de marzo" — el dueño, 2026-09-25); si falta esa tarifa devuelve
+ *  `null` (mejor sin precio que incompleto). `undefined` = ningún período aplica (o el período
+ *  no tiene precio cargado): seguir con las reglas genéricas por noches. */
+function quotePeriod(rows: SeasonPrice[], row: SeasonPrice, start: Date, endExclusive: Date): number | null | undefined {
+  const firstOfNextMonth = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+  for (const p of periodsOf(start.getFullYear(), row.month)) {
+    const price = row[p.field];
+    if (price == null || start.getTime() !== p.start.getTime()) continue;
+    if (endExclusive.getTime() === p.out.getTime()) return price;
+    if (endExclusive.getTime() === firstOfNextMonth.getTime() && Math.round((firstOfNextMonth.getTime() - p.out.getTime()) / DAY_MS) === 1) {
+      const dayNext = rows.find((r) => r.month === firstOfNextMonth.getMonth() + 1)?.price_day_q1;
+      return dayNext != null ? price + dayNext : null;
+    }
+  }
+  return undefined;
+}
+
 /** Cotiza un tramo [start, endExclusive) QUE NO CRUZA DE MES. Falla (`null`) si no hay fila
  *  para ese mes o falta el precio del tramo que corresponde. */
 function quoteMonthSegment(rows: SeasonPrice[], start: Date, endExclusive: Date): number | null {
@@ -65,27 +110,30 @@ function quoteMonthSegment(rows: SeasonPrice[], start: Date, endExclusive: Date)
   const row = rows.find((r) => r.month === start.getMonth() + 1);
   if (!row) return null;
 
-  // Mes completo: el tramo es el mes calendario entero — checkin día 1, checkout el 1° del
-  // mes siguiente (ej. filtro 1/1 al 1/2 → 31 noches de enero). Si el checkout puesto es el
-  // último día del mes en vez del 1° del siguiente (ej. 1/1 al 31/1), son 30 noches, no el
-  // mes completo — cae en la regla de tramo por bloques de abajo, mismo criterio "último día
-  // del filtro no se cobra" para cualquier caso.
-  const isFullMonth = start.getDate() === 1
-    && endExclusive.getTime() === new Date(start.getFullYear(), start.getMonth() + 1, 1).getTime();
-  if (isFullMonth && row.price_month != null) return row.price_month;
+  // Período exacto del calendario del dueño (mes / 1ª / 2ª quincena) — antes que cualquier
+  // regla por noches. La quincena y el mes SOLO se cobran así, por fecha exacta.
+  const byPeriod = quotePeriod(rows, row, start, endExclusive);
+  if (byPeriod !== undefined) return byPeriod;
 
   let nightsInQ2 = 0;
+  const q2From = Q2_IN_DAY[row.month] ?? 16;
   for (let t = start.getTime(); t < endExclusive.getTime(); t += DAY_MS) {
-    if (new Date(t).getDate() >= 16) nightsInQ2++;
+    if (new Date(t).getDate() >= q2From) nightsInQ2++;
   }
   const q2 = nightsInQ2 >= 3;
   const day = q2 ? row.price_day_q2 : row.price_day_q1;
   const week = q2 ? row.price_week_q2 : row.price_week_q1;
-  const fortnight = q2 ? row.price_fortnight_q2 : row.price_fortnight_q1;
 
-  if (n >= 14) return fortnight ?? null;
-  if (n >= 7) return week != null ? (week / 7) * n : null;
-  return day != null ? day * n : null;
+  // Semana = 7 noches ("se tiene en cuenta semana cuando tiene 7 noches", el dueño,
+  // 2026-09-25): cada bloque completo de 7 noches cobra la tarifa de semana y las noches que
+  // sobran van a la tarifa por día — ya no se prorratea la semana ni hay un precio fijo de
+  // quincena para "14 noches o más" (eso hacía que 15 y 16 noches dieran lo mismo). Si falta la
+  // tarifa que hace falta → `null`.
+  const weeks = Math.floor(n / 7);
+  const rest = n % 7;
+  if (weeks > 0 && week == null) return null;
+  if (rest > 0 && day == null) return null;
+  return weeks * (week ?? 0) + rest * (day ?? 0);
 }
 
 /**
@@ -96,18 +144,21 @@ function quoteMonthSegment(rows: SeasonPrice[], start: Date, endExclusive: Date)
  * en algún tramo del rango (si el rango cruza de mes y falta la tarifa de UNO de los
  * meses, se devuelve `null` para todo el rango — mejor no mostrar precio que uno incompleto).
  *
- * Reglas por tramo dentro de un mismo mes (acordadas con el usuario, 2026-09-08;
- * prorrateo de semana sumado 2026-09-11; mes completo → price_month sumado 2026-09-18;
- * split por mes al cruzar de mes sumado 2026-09-22; checkout no se cobra sumado 2026-09-22
- * — ver `splitByMonth`/`rangeNights`):
+ * Reglas por tramo dentro de un mismo mes (acordadas con el usuario y el dueño; split por mes
+ * y checkout excluido 2026-09-22 — ver `splitByMonth`/`rangeNights`; períodos por fecha y
+ * semana = 7 noches 2026-09-25, que reemplazaron al prorrateo de semana, al precio fijo de
+ * quincena para "14 noches o más" y al mes completo por 1°→1°):
  *  - N = noches del tramo, checkout EXCLUIDO → "del 1 al 8" son 7 noches, no 8.
- *  - Quincena: 1ª = noches 1-15, 2ª = 16-fin. Si el tramo cruza la mitad de mes, se usa la
- *    2ª quincena cuando le caen 3 noches o más.
- *  - Mes completo (checkin día 1, checkout el 1° del mes siguiente): precio de mes fijo
- *    (`price_month`), si está cargado — sin esto, un mes de 30/31 noches caía en la regla
- *    de abajo (N ≥ 14) y devolvía la tarifa de la 2ª quincena, no la del mes entero.
- *  - Tramo por bloques (el resto de los casos): N ≤ 6 → precio por día × N · 7 ≤ N ≤ 13
- *    → precio semana ÷ 7 × N (prorrateado) · N ≥ 14 → precio quincena (fijo).
+ *  - Períodos (`periodsOf`): un tramo que entra y sale EXACTO en las fechas de un período cobra
+ *    la tarifa de ese período (mes / 1ª quincena / 2ª quincena), sin importar cuántas noches
+ *    sean. Ej. enero: 1ª = 1 al 15, 2ª = 16 al 31, mes = 1 al 31; febrero: 1ª = 1 al 15, 2ª = 15
+ *    al 28, mes = 1 al 28. Período + 1 día hasta el 1° del mes siguiente (ej. 1/2 al 1/3) =
+ *    precio del período + 1 día a la tarifa por día de la 1ª quincena del mes siguiente.
+ *    Ver `quotePeriod`. Quincena y mes NO se cobran de ninguna otra forma.
+ *  - Todo lo demás (estadía que no es un período): bloques de 7 noches a la tarifa de semana +
+ *    las noches sobrantes a la tarifa por día. N ≤ 6 → día × N. 10 noches = semana + 3 días.
+ *    La quincena (1ª = días 1-15, 2ª = 16-fin; en feb la 2ª entra el 15) sale de qué quincena
+ *    le caen 3 noches o más al tramo — una sola para todo el tramo.
  *  - Un rango que cruza de mes (ej. 29/12 al 15/1, checkout 15/1) se parte en un tramo por
  *    mes y se suman: 29-31/12 (3 noches, por día) + 1-14/1 (14 noches, = la 1ª quincena).
  */
