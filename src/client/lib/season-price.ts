@@ -120,7 +120,14 @@ function quoteMonthSegment(rows: SeasonPrice[], start: Date, endExclusive: Date)
   for (let t = start.getTime(); t < endExclusive.getTime(); t += DAY_MS) {
     if (new Date(t).getDate() >= q2From) nightsInQ2++;
   }
-  const q2 = nightsInQ2 >= 3;
+  // Tramo que NO mezcla quincenas (todas sus noches caen en la misma mitad del mes): usa esa
+  // quincena siempre, sin importar cuántas noches sean — bug encontrado 2026-09-28, el umbral
+  // de 3 noches de abajo dejaba un tramo de 1-2 noches en la 2ª quincena (ej. 30-31/12) cotizando
+  // con la 1ª por defecto, que en meses como diciembre (el dueño solo carga la 2ª quincena) no
+  // tiene tarifa cargada → precio null para todo el rango que lo incluyera.
+  // Tramo que SÍ mezcla (cruza la mitad de mes): se usa la 2ª quincena cuando le caen 3 noches
+  // o más (regla original, 2026-09-08).
+  const q2 = nightsInQ2 === n || nightsInQ2 >= 3;
   const day = q2 ? row.price_day_q2 : row.price_day_q1;
   const week = q2 ? row.price_week_q2 : row.price_week_q1;
 
