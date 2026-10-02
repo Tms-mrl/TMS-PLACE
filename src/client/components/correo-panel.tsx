@@ -52,7 +52,10 @@ export function CorreoPanel({ branches, myBranchId, onStartAttach, attachResult,
   const [openId, setOpenId] = useState<number | null>(null);
   const [fStatus, setFStatus] = useState(ALL);
   const [fBranch, setFBranch] = useState<'all' | 'mine'>('all');
-  const [fUnread, setFUnread] = useState(false);
+  // Antes era un toggle "Solo no leídos" (on/off) — pasado a 3 opciones (ALL/leídos/no
+  // leídos) a pedido del usuario 2026-10-02: el botón de 2 estados no dejaba claro qué
+  // mostraba cuando estaba apagado ("¿todos, o los leídos?").
+  const [fRead, setFRead] = useState<typeof ALL | 'read' | 'unread'>(ALL);
   // Los archivados quedan afuera de la vista por defecto (mismo criterio que "Ver
   // archivadas" en Inventario) — este toggle los revela.
   const [fArchived, setFArchived] = useState(false);
@@ -96,7 +99,7 @@ export function CorreoPanel({ branches, myBranchId, onStartAttach, attachResult,
   // consumen 2 paneles, no justifica sumar un prop más a todos los hermanos).
   useEffect(() => { api<{ members: Member[] }>('/api/agencies/members').then((r) => setMembers(r.members)).catch(() => {}); }, []);
   useEffect(() => { if (status?.connected) loadThreads(); }, [status?.connected, fStatus, fBranch]);
-  useEffect(() => { setPage(0); }, [fStatus, fBranch, fUnread, fArchived, q]);
+  useEffect(() => { setPage(0); }, [fStatus, fBranch, fRead, fArchived, q]);
   useEffect(() => {
     if (status?.connected && !status.lastSyncAt && !autoSynced.current) { autoSynced.current = true; syncNow(); }
   }, [status?.connected, status?.lastSyncAt]);
@@ -170,7 +173,8 @@ export function CorreoPanel({ branches, myBranchId, onStartAttach, attachResult,
   const hideArchived = fStatus !== 'archivado' && !fArchived;
   const filtered = threads.filter((t) => {
     if (hideArchived && t.status === 'archivado') return false;
-    if (fUnread && !t.unread) return false;
+    if (fRead === 'unread' && !t.unread) return false;
+    if (fRead === 'read' && t.unread) return false;
     if (needle && ![t.subject, t.from_name, t.from_addr, t.snippet].filter(Boolean).some((s) => s!.toLowerCase().includes(needle))) return false;
     return true;
   });
@@ -212,9 +216,14 @@ export function CorreoPanel({ branches, myBranchId, onStartAttach, attachResult,
             </SelectContent>
           </Select>
         )}
-        <Button variant={fUnread ? 'secondary' : 'outline'} size="sm" onClick={() => setFUnread((v) => !v)}>
-          {fUnread ? 'Viendo solo no leídos' : 'Solo no leídos'}
-        </Button>
+        <Select value={fRead} onValueChange={(v) => setFRead(v as typeof fRead)}>
+          <SelectTrigger className="h-9 w-auto min-w-[120px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>Todos</SelectItem>
+            <SelectItem value="unread">No leídos</SelectItem>
+            <SelectItem value="read">Leídos</SelectItem>
+          </SelectContent>
+        </Select>
         <Button variant={fArchived ? 'secondary' : 'outline'} size="sm" onClick={() => setFArchived((v) => !v)}>
           {fArchived ? 'Viendo archivadas' : 'Ver archivadas'}
         </Button>
