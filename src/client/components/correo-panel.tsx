@@ -183,8 +183,11 @@ export function CorreoPanel({ branches, myBranchId, onStartAttach, attachResult,
   return (
     <div>
       {(status.needsReconnect || status.lastError) && (
-        <div className="pnotice">
-          La conexión con Gmail necesita renovarse{status.lastError ? ` (${status.lastError})` : ''}.{' '}
+        // El detalle técnico (status HTTP + body crudo de Google, ej. "refresh_token: 400
+        // { "error": "invalid_grant", ... }") NO va en el texto — es para debug, no para el
+        // usuario de la agencia. Queda en el `title` por si algún día hace falta mirarlo.
+        <div className="pnotice" title={status.lastError || undefined}>
+          La conexión con Gmail necesita renovarse.{' '}
           <a href="/api/correo/connect?return_to=/app" style={{ fontWeight: 600 }}>Reconectar casilla</a>
         </div>
       )}
