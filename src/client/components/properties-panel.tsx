@@ -38,14 +38,24 @@ const NONE = '_none';
 // Caso borde: Desde == Hasta (o solo uno puesto) es "quiero ese día", un rango vacío
 // [d, d) que no solaparía con nada — ni con una reserva que ARRANCA ese día. Se lo trata
 // como [d, d+1) (una noche) para que el día de ingreso de otra reserva lo marque ocupado.
-function bookedInRange(bookingsJson: string | null, from: string, to: string): boolean {
+function overlapping(bookingsJson: string | null, from: string, to: string): { f: string; t: string; k?: string }[] {
   if (to <= from) {
     const d = new Date(`${from}T00:00:00Z`);
     d.setUTCDate(d.getUTCDate() + 1);
     to = d.toISOString().slice(0, 10);
   }
-  try { return (JSON.parse(bookingsJson || '[]') as { f: string; t: string }[]).some((b) => b.f < to && from < b.t); }
-  catch { return false; }
+  try { return (JSON.parse(bookingsJson || '[]') as { f: string; t: string; k?: string }[]).filter((b) => b.f < to && from < b.t); }
+  catch { return []; }
+}
+const bookedInRange = (bookingsJson: string | null, from: string, to: string) => overlapping(bookingsJson, from, to).length > 0;
+
+// Estado de la propiedad EN el rango (no hoy): alquilada si una reserva confirmada se
+// solapa, reservada si solo hay tentativas, disponible si no hay nada. 'vendida' gana siempre.
+function rangeStatus(p: Property, from: string, to: string): string {
+  if (p.status === 'vendida') return 'vendida';
+  const o = overlapping(p.bookings, from, to);
+  if (o.some((b) => b.k === 'alquiler')) return 'alquilada';
+  return o.length ? 'reservada' : 'disponible';
 }
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -269,10 +279,7 @@ export function PropertiesPanel({ branches, onChanged, preset, mailAttach, onSen
     // de hoy: una casa con un alquiler que arranca el día 2 figura 'reservada' hoy pero
     // está libre el día 1. Acá solo se saca la vendida; el choque de reservas lo decide
     // el filtro de fechas de más abajo.
-    if (f.status) {
-      if (dateActive && f.status === 'disponible') { if (p.status === 'vendida') return false; }
-      else if (p.status !== f.status) return false;
-    }
+    if (f.status && (dateActive ? rangeStatus(p, dFrom, dTo) : p.status) !== f.status) return false;
     if (f.branch && String(p.branch_id) !== f.branch) return false;
     if (f.kind && (p.kind || '') !== f.kind) return false;
     if (f.priced) {
@@ -296,7 +303,9 @@ export function PropertiesPanel({ branches, onChanged, preset, mailAttach, onSen
       // temporada habitual del anuncio, no un bloqueo de fechas: si no hay una reserva
       // puntual en el medio, la propiedad SÍ está libre para el rango (decisión de
       // producto, 2026-08-20 — antes también filtraba por esa ventana).
-      if (bookedInRange(p.bookings, dFrom, dTo)) return false;
+      // Excepto si se pidió un Estado: ahí ya se filtró por el estado del rango (arriba),
+      // y "alquilada"/"reservada" justamente QUIEREN las que tienen reserva solapada.
+      if (!f.status && bookedInRange(p.bookings, dFrom, dTo)) return false;
     }
     return true;
   });
@@ -321,10 +330,9 @@ export function PropertiesPanel({ branches, onChanged, preset, mailAttach, onSen
 
   // Con Desde/Hasta activo, el chip de Estado tiene que hablar DEL RANGO, no del estado
   // global de hoy: una casa con una reserva en otro mes está libre en las fechas buscadas
-  // y mostrarla como "Reservada" confunde. Y como el filtro de arriba ya sacó del listado
-  // a toda la que tenga una reserva solapada, lo que queda ES lo disponible en el rango.
+  // y mostrarla como "Reservada" confunde. Se muestra el estado calculado para el rango.
   const displayRows = dateActive
-    ? sorted.map((p) => (p.status === 'vendida' || p.status === 'disponible' ? p : { ...p, status: 'disponible' }))
+    ? sorted.map((p) => { const s = rangeStatus(p, dFrom, dTo); return s === p.status ? p : { ...p, status: s }; })
     : sorted;
 
   // Los KPIs cuentan sobre lo NO archivado (que es lo que el panel muestra por defecto):
