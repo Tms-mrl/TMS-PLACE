@@ -34,7 +34,16 @@ const NONE = '_none';
 // salida (to/t) ya no cuenta como ocupado — el huésped se va a la mañana y otra familia
 // puede entrar esa misma tarde, así que dos rangos que se tocan en un solo día (uno
 // termina donde el otro arranca) NO se consideran solapados.
+//
+// Caso borde: Desde == Hasta (o solo uno puesto) es "quiero ese día", un rango vacío
+// [d, d) que no solaparía con nada — ni con una reserva que ARRANCA ese día. Se lo trata
+// como [d, d+1) (una noche) para que el día de ingreso de otra reserva lo marque ocupado.
 function bookedInRange(bookingsJson: string | null, from: string, to: string): boolean {
+  if (to <= from) {
+    const d = new Date(`${from}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + 1);
+    to = d.toISOString().slice(0, 10);
+  }
   try { return (JSON.parse(bookingsJson || '[]') as { f: string; t: string }[]).some((b) => b.f < to && from < b.t); }
   catch { return false; }
 }

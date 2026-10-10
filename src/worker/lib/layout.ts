@@ -124,8 +124,6 @@ header.site nav{display:flex;align-items:center;gap:8px}
 .btn.ghost:hover{background:var(--surface);border-color:var(--muted)}
 .btn.wa{background:var(--wa)}.btn.wa:hover{background:#189449}
 .btn.dark{background:var(--forest)}.btn.dark:hover{background:#152a23}
-.wa-fab{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;background:var(--wa);box-shadow:var(--shadow);flex-shrink:0;transition:transform .15s ease,background .2s}
-.wa-fab:hover{background:#189449;transform:translateY(-2px)}
 
 .hero{padding:52px 0 30px}
 .hero h1{font-size:clamp(30px,5.5vw,52px);line-height:1.04;margin:0 0 14px}
@@ -217,8 +215,6 @@ form.search .s-more summary b{color:var(--accent)}
 footer.site{border-top:1px solid var(--line);background:var(--forest);color:#e8ddc8;padding:36px 0;margin-top:20px}
 footer.site .brand{color:#f6f1e8}
 footer.site p{margin:8px 0 0;color:#b6ab93;font-size:14px}
-footer.site .credit{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:18px;padding-top:18px;border-top:1px solid rgba(255,255,255,.12);font-size:13px;color:#b6ab93}
-footer.site .credit b{color:#e8ddc8}
 .empty{color:var(--muted);padding:48px 0;text-align:center;background:var(--surface);border:1px dashed var(--line);border-radius:var(--radius)}
 
 .specs{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0}
@@ -302,12 +298,6 @@ ${o.head || ''}
 <footer class="site"><div class="wrap">
   <a class="brand" href="/">${brandMark(o.brandName, o.brandLogoKey ?? null)}</a>
   <p>Gestión inmobiliaria y marketplace de propiedades</p>
-  <div class="credit">
-    <span>Desarrollado por <b>CoopenStudio.com</b></span>
-    <a class="wa-fab" href="https://wa.me/34895554449" target="_blank" rel="noopener noreferrer" aria-label="Contactar por WhatsApp" title="Contactar por WhatsApp">
-      <svg viewBox="0 0 24 24" width="20" height="20" fill="#fff" aria-hidden="true"><path d="M12.04 2c-5.46 0-9.9 4.44-9.9 9.9 0 1.75.45 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 004.79 1.22h.01c5.46 0 9.9-4.44 9.9-9.9a9.83 9.83 0 00-2.9-7.01A9.82 9.82 0 0012.04 2m0 1.67a8.2 8.2 0 018.23 8.24c0 4.55-3.7 8.24-8.24 8.24a8.2 8.2 0 01-4.2-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.18 8.18 0 01-1.26-4.38 8.2 8.2 0 018.26-8.24M8.53 6.9c-.16 0-.42.06-.64.31s-.85.83-.85 2.02.87 2.34 1 2.5c.11.16 1.68 2.68 4.13 3.68 2.05.83 2.47.66 2.92.62s1.45-.59 1.66-1.16.21-1.06.14-1.16-.24-.16-.5-.28-1.53-.75-1.77-.84-.4-.13-.58.13-.68.83-.83 1-.31.18-.57.06a7.14 7.14 0 01-2.1-1.3 7.9 7.9 0 01-1.45-1.8c-.15-.26 0-.4.11-.53s.24-.28.36-.42.16-.24.24-.4.04-.31-.02-.44-.57-1.42-.79-1.94-.42-.44-.58-.44z"/></svg>
-    </a>
-  </div>
 </div></footer>
 </body>
 </html>`;
