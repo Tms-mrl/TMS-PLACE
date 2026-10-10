@@ -265,7 +265,14 @@ export function PropertiesPanel({ branches, onChanged, preset, mailAttach, onSen
     if (f.text) { const q = f.text.toLowerCase(); if (!(`${p.title} ${p.city || ''}`.toLowerCase().includes(q))) return false; }
     // Matchea la operación principal O la secundaria (una temporario + venta sale en las dos).
     if (f.op && p.operation !== f.op && p.operation_secondary !== f.op) return false;
-    if (f.status && p.status !== f.status) return false;
+    // Con fechas puestas, "Disponible" habla DEL RANGO (ver `displayRows`), no del estado
+    // de hoy: una casa con un alquiler que arranca el día 2 figura 'reservada' hoy pero
+    // está libre el día 1. Acá solo se saca la vendida; el choque de reservas lo decide
+    // el filtro de fechas de más abajo.
+    if (f.status) {
+      if (dateActive && f.status === 'disponible') { if (p.status === 'vendida') return false; }
+      else if (p.status !== f.status) return false;
+    }
     if (f.branch && String(p.branch_id) !== f.branch) return false;
     if (f.kind && (p.kind || '') !== f.kind) return false;
     if (f.priced) {
