@@ -164,7 +164,9 @@ export function PropertyRow({ p, index, expanded, checked, selectMode, selectedC
       <div className="prow-main">
         <div className="prow-where">
           <span className="prow-addr">{where || 'Sin dirección cargada'}</span>
-          <span className="prow-ref">{p.code ? `Cod. ${p.code}` : `#${p.id}`}</span>
+          {p.code
+            ? <span className="prow-ref prow-code" title="Código">{p.code}</span>
+            : <span className="prow-ref">#{p.id}</span>}
         </div>
 
         <h3 className="prow-title">
