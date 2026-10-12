@@ -70,6 +70,8 @@ export type Property = {
   address: string | null;
   /** URL del aviso en el sitio propio del cliente. Es lo que se comparte por WhatsApp. */
   external_url: string | null;
+  /** Código del aviso (ej. "AV-CAS-72"), el de BuscadorProp. Texto libre, editable. */
+  code: string | null;
   description: string | null;
   lat: number | null;
   lng: number | null;

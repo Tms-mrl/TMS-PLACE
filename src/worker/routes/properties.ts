@@ -37,7 +37,7 @@ properties.get('/mine', async (c) => {
     .prepare(
       `SELECT p.id, p.owner_kind, p.operation, p.operation_secondary, p.kind, p.title, p.price, p.currency, p.price_period, p.city, p.province,
               p.address, p.description, p.lat, p.lng, p.rooms, p.area_m2, p.bathrooms, p.capacity, p.amenities,
-              p.available_from, p.available_until, p.external_url,
+              p.available_from, p.available_until, p.external_url, p.code,
               ${COMPUTED_STATUS_SQL} AS status, p.published, p.archived_at, p.branch_id, b.name AS branch_name, p.created_at, p.updated_at,
               (SELECT r2_key FROM property_media pm WHERE pm.property_id = p.id ORDER BY pm.sort LIMIT 1) AS cover_key,
               (SELECT COUNT(*) FROM property_media pm2 WHERE pm2.property_id = p.id) AS photos,
@@ -97,8 +97,8 @@ properties.post('/', async (c) => {
       `INSERT INTO properties
         (owner_kind, agency_id, branch_id, owner_user_id, operation, operation_secondary, kind, title, description,
          price, currency, price_period, area_m2, rooms, capacity, available_from, available_until, bathrooms, amenities,
-         address, city, province, external_url, lat, lng, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'disponible') RETURNING *`,
+         address, city, province, external_url, lat, lng, code, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'disponible') RETURNING *`,
     )
     .bind(
       ownerKind, agencyId, branchId, c.var.user.id, operation, secondaryOp(body.operation_secondary, operation),
@@ -107,7 +107,7 @@ properties.post('/', async (c) => {
       num(body.capacity), str(body.available_from, 10), str(body.available_until, 10),
       num(body.bathrooms), jsonAmenities(body.amenities),
       str(body.address, 200), str(body.city, 80), str(body.province, 80), str(body.external_url, 500) || null,
-      num(body.lat), num(body.lng),
+      num(body.lat), num(body.lng), str(body.code, 60) || null,
     )
     .first();
   return c.json({ property: row }, 201);
@@ -232,6 +232,7 @@ properties.patch('/:id', async (c) => {
   if ('province' in body) setStr('province', str(body.province, 80));
   if ('address' in body) setStr('address', str(body.address, 200));
   if ('external_url' in body) setStr('external_url', str(body.external_url, 500) || null);
+  if ('code' in body) setStr('code', str(body.code, 60) || null);
   if ('status' in body) {
     // disponible/reservada/alquilada se calculan solos desde el calendario; acá
     // solo se puede vender (marcar 'vendida') o revertir eso ('disponible').

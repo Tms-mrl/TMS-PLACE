@@ -37,7 +37,7 @@ function initForm(edit?: Property) {
     price: s(edit.price), currency: edit.currency || 'ARS', price_period: edit.price_period || '', rooms: s(edit.rooms), bathrooms: s(edit.bathrooms),
     area_m2: s(edit.area_m2), capacity: s(edit.capacity), available_from: edit.available_from || '', available_until: edit.available_until || '',
     address: edit.address || '', city: edit.city || '', province: edit.province || '', description: edit.description || '',
-    external_url: edit.external_url || '',
+    external_url: edit.external_url || '', code: edit.code || '',
   };
 }
 
@@ -119,7 +119,7 @@ function PhotoStrip({ propertyId, media, setMedia }: { propertyId: number; media
 const emptyForm = {
   title: '', operation: 'alquiler', operation_secondary: '', kind: 'departamento', price: '', currency: 'ARS', price_period: '',
   rooms: '', bathrooms: '', area_m2: '', capacity: '', available_from: '', available_until: '',
-  address: '', city: '', province: '', description: '', external_url: '',
+  address: '', city: '', province: '', description: '', external_url: '', code: '',
 };
 
 // Alta de propiedad (campos) → luego fotos + publicar.
@@ -159,7 +159,7 @@ export function PropertyForm({ scope, branches, edit, initial, onClose, onSaved 
     price: Number(f.price) || null, currency: f.currency, price_period: f.price_period, rooms: Number(f.rooms) || null,
     bathrooms: Number(f.bathrooms) || null, area_m2: Number(f.area_m2) || null, capacity: Number(f.capacity) || null,
     available_from: f.available_from || null, available_until: f.available_until || null,
-    address: f.address, city: f.city, province: f.province, external_url: f.external_url.trim() || null,
+    address: f.address, city: f.city, province: f.province, external_url: f.external_url.trim() || null, code: f.code.trim() || null,
     branch_id: branchId ? Number(branchId) : null, amenities,
     owner_client_id: ownerClientId ? Number(ownerClientId) : null,
   });
@@ -326,6 +326,7 @@ export function PropertyForm({ scope, branches, edit, initial, onClose, onSaved 
               onChange={(lat, lng) => setLatLng({ lat, lng })} />
           </div>
           <textarea placeholder="Descripción" rows={3} value={f.description} onChange={(e) => set('description', e.target.value)} />
+          <input placeholder="Código (ej. AV-CAS-72)" maxLength={60} value={f.code} onChange={(e) => set('code', e.target.value)} />
           <div>
             <input placeholder="Link del aviso en el sitio de El Muelle" value={f.external_url} onChange={(e) => set('external_url', e.target.value)} />
             <p className="muted small" style={{ margin: '4px 0 0' }}>Es lo que se manda cuando compartís la propiedad por WhatsApp desde el Inventario.</p>

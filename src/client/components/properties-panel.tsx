@@ -58,6 +58,9 @@ function rangeStatus(p: Property, from: string, to: string): string {
   return o.length ? 'reservada' : 'disponible';
 }
 
+// Para buscar códigos sin importar guiones/espacios/mayúsculas: "av cas 72" == "AV-CAS-72".
+const normCode = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+
 const pad = (n: number) => String(n).padStart(2, '0');
 const fmtShort = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
 
@@ -272,7 +275,7 @@ export function PropertiesPanel({ branches, onChanged, preset, mailAttach, onSen
   const filtered = props.filter((p) => {
     // Archivadas ocultas por defecto (el toggle "Ver archivadas" invierte esto).
     if (f.archived ? !p.archived_at : !!p.archived_at) return false;
-    if (f.text) { const q = f.text.toLowerCase(); if (!(`${p.title} ${p.city || ''}`.toLowerCase().includes(q))) return false; }
+    if (f.text) { const q = f.text.toLowerCase(); if (!(`${p.title} ${p.city || ''} ${p.code || ''}`.toLowerCase().includes(q) || (!!p.code && !!normCode(q) && normCode(p.code).includes(normCode(q))))) return false; }
     // Matchea la operación principal O la secundaria (una temporario + venta sale en las dos).
     if (f.op && p.operation !== f.op && p.operation_secondary !== f.op) return false;
     // Con fechas puestas, "Disponible" habla DEL RANGO (ver `displayRows`), no del estado
