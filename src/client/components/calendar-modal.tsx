@@ -203,7 +203,11 @@ export function CalendarModal({ property, onClose }: { property: Property; onClo
   // cierra. No importa el orden — la fecha menor es el "desde" y la mayor el "hasta".
   function pickDay(d: string) {
     const occ = bookingOccupying(d);
-    if (occ) { goToBooking(occ); return; }   // noche ocupada: no se selecciona, muestra de qué reserva es
+    // Noche ocupada: no se selecciona, muestra de qué reserva es. Excepción: el día en que
+    // ARRANCA otra reserva sirve como día de salida de la nueva (sale a la mañana, entra
+    // la otra familia a la tarde), siempre que el rango no pise ninguna noche ocupada.
+    const asCheckout = !!occ && !sold && !!f.from && !f.to && d === occ.from_date && d > f.from && !clashes(f.from, d);
+    if (occ && !asCheckout) { goToBooking(occ); return; }
     if (sold) return;
     if (!f.from || f.to) { setF((s) => ({ ...s, from: d, to: '' })); return; }
     const from = d < f.from ? d : f.from;
@@ -237,12 +241,12 @@ export function CalendarModal({ property, onClose }: { property: Property; onClo
           const b = occ || checkout;
           const cls = occ ? (occ.kind === 'alquiler' ? 'cal-day booked' : 'cal-day booked-reserva') : checkout ? 'cal-day checkout' : 'cal-day';
           const focus = b && b.id === focusId ? ' cal-focus' : '';
-          const inSel = !occ && f.from && (f.to ? d >= f.from && d <= f.to : d === f.from);
+          const inSel = (!occ || d === f.to) && f.from && (f.to ? d >= f.from && d <= f.to : d === f.from);
           const isEdge = d === f.from || d === f.to;
           // Si la punta de la selección nueva cae justo en un día de salida ya cargado
           // (el otro huésped se va y este entra el mismo día), se marca azul en vez del
           // verde de selección normal — es un "día de entrega", no una selección común.
-          const sel = inSel ? (isEdge && checkout ? ' cal-sel cal-handover' : isEdge ? ' cal-sel cal-sel-edge' : ' cal-sel') : '';
+          const sel = inSel ? (isEdge && (checkout || occ) ? ' cal-sel cal-handover' : isEdge ? ' cal-sel cal-sel-edge' : ' cal-sel') : '';
           return (
             <button
               key={i} type="button" className={cls + focus + sel}
