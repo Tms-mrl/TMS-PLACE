@@ -5,7 +5,7 @@ import {
 import { SiWhatsapp } from 'react-icons/si';
 import { api } from '../lib/api';
 import { useVisited } from '../lib/use-visited';
-import type { Agency, Branch, Inquiry, Member, Property, Summary, User } from '../lib/types';
+import type { Agency, Branch, Inquiry, MailAttach, Member, Property, Summary, User } from '../lib/types';
 import { PropertiesPanel, type PropPreset } from './properties-panel';
 import { ClientsPanel } from './clients-panel';
 import { AgencyMap } from './agency-map';
@@ -65,14 +65,14 @@ export function AgencyWorkspace({ agency, user, onLogout, tab, setTab }: {
   // consume y limpia al volver. Ambos paneles siguen montados al cambiar de tab
   // (useVisited), así que el hilo abierto y lo ya tipeado en la respuesta no se pierden.
   const [mailAttaching, setMailAttaching] = useState(false);
-  const [mailAttachResult, setMailAttachResult] = useState<Property[] | null>(null);
+  const [mailAttachResult, setMailAttachResult] = useState<MailAttach | null>(null);
   const visited = useVisited(tab);
   // Salir de Propiedades sin elegir (click en otra pestaña, o el "atrás" del celu, que
   // vuelve a la pestaña anterior sin pasar por el onClick de arriba) cancela el modo adjuntar.
   useEffect(() => { if (mailAttaching && tab !== 'propiedades') setMailAttaching(false); }, [tab, mailAttaching]);
 
   function startMailAttach() { setMailAttaching(true); setPreset(undefined); setTab('propiedades'); }
-  function finishMailAttach(list: Property[]) { setMailAttachResult(list); setMailAttaching(false); setTab('correo'); }
+  function finishMailAttach(list: Property[], from: string, to: string) { setMailAttachResult({ props: list, from, to }); setMailAttaching(false); setTab('correo'); }
 
   const loadMine = () => api<{ agency: Agency; role: string | null; branches: Branch[] }>('/api/agencies/mine')
     .then((r) => { setBranches(r.branches || []); if (r.agency) setAg({ ...r.agency, role: r.role || r.agency.role }); }).catch(() => {});

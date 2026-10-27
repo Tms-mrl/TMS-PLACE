@@ -2,11 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, Mail, Paperclip, Pencil, RefreshCw } from 'lucide-react';
 import { api } from '../lib/api';
 import { toast } from '../lib/toast';
-import type { Branch, MailMessage, MailStatus, MailThread, Member, Property } from '../lib/types';
+import type { Branch, MailAttach, MailMessage, MailStatus, MailThread, Member, Property } from '../lib/types';
 import { usePoll } from '../lib/use-poll';
 import { useBackLayer } from '../lib/back-nav';
 import { shareBlocks } from '../lib/share-block';
-import { DateRangePicker } from './properties-panel';
+import { quoteForRange } from '../lib/season-price';
 import { Modal } from './property-form';
 import { Button } from './ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
@@ -45,7 +45,7 @@ export function CorreoPanel({ branches, myBranchId, onStartAttach, attachResult,
   /** "Adjuntar propiedades" (al responder un hilo o al redactar uno nuevo) salta al
    *  Inventario completo en vez de un picker aparte — ver PropertiesPanel
    *  `mailAttach`/`onSendToMail` en agency-workspace.tsx. */
-  onStartAttach: () => void; attachResult: Property[] | null; onConsumeAttachResult: () => void;
+  onStartAttach: () => void; attachResult: MailAttach | null; onConsumeAttachResult: () => void;
 }) {
   const [status, setStatus] = useState<MailStatus | null>(null);
   const [threads, setThreads] = useState<MailThread[]>([]);
@@ -301,9 +301,24 @@ export function CorreoPanel({ branches, myBranchId, onStartAttach, attachResult,
   );
 }
 
+const fmtDay = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
+
+/** Aviso SOLO para quien redacta (no viaja en el mensaje): qué propiedades adjuntas no tienen
+ *  tarifa cargada para las fechas del Inventario, así que saldrán sin línea de precio. */
+function NoRateNote({ attached, from, to }: { attached: Property[]; from: string; to: string }) {
+  if (!from) return null;
+  const missing = attached.filter((p) => quoteForRange(p.season_prices ?? null, from, to || from) == null);
+  if (!missing.length) return null;
+  return (
+    <div className="small" style={{ marginTop: 8, color: 'var(--warn)' }}>
+      Sin tarifa para {fmtDay(from)} → {fmtDay(to || from)}: {missing.map((p) => p.code || p.title).join(', ')}. Se envía sin precio ni fechas (este aviso no va en el mensaje).
+    </div>
+  );
+}
+
 function ComposeModal({ onClose, onSent, onStartAttach, attachResult, onConsumeAttachResult }: {
   onClose: () => void; onSent: (thread: MailThread) => void;
-  onStartAttach: () => void; attachResult: Property[] | null; onConsumeAttachResult: () => void;
+  onStartAttach: () => void; attachResult: MailAttach | null; onConsumeAttachResult: () => void;
 }) {
   const [to, setTo] = useState('');
   const [subject, setSubject] = useState('');
@@ -319,8 +334,11 @@ function ComposeModal({ onClose, onSent, onStartAttach, attachResult, onConsumeA
     if (!attachResult) return;
     setAttached((prev) => {
       const have = new Set(prev.map((p) => p.id));
-      return [...prev, ...attachResult.filter((p) => !have.has(p.id))];
+      return [...prev, ...attachResult.props.filter((p) => !have.has(p.id))];
     });
+    // Las fechas del filtro del Inventario viajan con la selección y definen el precio del
+    // mensaje (ya no hay selector de fechas acá): la última búsqueda con fechas manda.
+    if (attachResult.from) { setDFrom(attachResult.from); setDTo(attachResult.to); }
     onConsumeAttachResult();
   }, [attachResult]);
 
@@ -354,7 +372,7 @@ function ComposeModal({ onClose, onSent, onStartAttach, attachResult, onConsumeA
         <Button variant="outline" size="sm" onClick={onStartAttach} title="Te lleva al Inventario para elegir">
           <Paperclip className="h-4 w-4" />Adjuntar propiedades{attached.length ? ` (${attached.length})` : ''}
         </Button>
-        {attached.length > 0 && <DateRangePicker from={dFrom} to={dTo} onChange={(f, t) => { setDFrom(f); setDTo(t); }} />}
+        {attached.length > 0 && <span className="muted small">{dFrom ? `Precios para ${fmtDay(dFrom)} → ${fmtDay(dTo || dFrom)}` : 'Sin fechas en el Inventario: se envía sin precio'}</span>}
         {attached.length > 0 && (
           <button type="button" className="link-btn" onClick={() => { setAttached([]); setDFrom(''); setDTo(''); }}>Quitar todas</button>
         )}
@@ -363,6 +381,8 @@ function ComposeModal({ onClose, onSent, onStartAttach, attachResult, onConsumeA
         <div className="mail-preview">
           <div className="muted small">Así se ve lo adjuntado:</div>
           <pre>{attachedBlock}</pre>
+          <NoRateNote attached={attached} from={dFrom} to={dTo} />
+        <NoRateNote attached={attached} from={dFrom} to={dTo} />
         </div>
       )}
       <Button style={{ marginTop: 12 }} onClick={send} disabled={sending}>{sending ? 'Enviando…' : 'Enviar'}</Button>
@@ -421,7 +441,7 @@ function ThreadDetail({ id, branches, members, cache, onBack, onStartAttach, att
    *  apertura anterior en esta misma sesión — abrir uno que ya está acá es instantáneo. */
   cache: Map<number, { thread: MailThread; messages: MailMessage[] }>;
   onBack: () => void;
-  onStartAttach: () => void; attachResult: Property[] | null; onConsumeAttachResult: () => void;
+  onStartAttach: () => void; attachResult: MailAttach | null; onConsumeAttachResult: () => void;
 }) {
   const [thread, setThread] = useState<MailThread | null>(null);
   const [messages, setMessages] = useState<MailMessage[] | null>(null);
@@ -470,8 +490,11 @@ function ThreadDetail({ id, branches, members, cache, onBack, onStartAttach, att
     if (!attachResult) return;
     setAttached((prev) => {
       const have = new Set(prev.map((p) => p.id));
-      return [...prev, ...attachResult.filter((p) => !have.has(p.id))];
+      return [...prev, ...attachResult.props.filter((p) => !have.has(p.id))];
     });
+    // Las fechas del filtro del Inventario viajan con la selección y definen el precio del
+    // mensaje (ya no hay selector de fechas acá): la última búsqueda con fechas manda.
+    if (attachResult.from) { setDFrom(attachResult.from); setDTo(attachResult.to); }
     onConsumeAttachResult();
   }, [attachResult]);
 
@@ -585,7 +608,7 @@ function ThreadDetail({ id, branches, members, cache, onBack, onStartAttach, att
           <Button variant="outline" size="sm" onClick={onStartAttach} title="Te lleva al Inventario para elegir">
             <Paperclip className="h-4 w-4" />Adjuntar propiedades{attached.length ? ` (${attached.length})` : ''}
           </Button>
-          {attached.length > 0 && <DateRangePicker from={dFrom} to={dTo} onChange={(f, t) => { setDFrom(f); setDTo(t); }} />}
+          {attached.length > 0 && <span className="muted small">{dFrom ? `Precios para ${fmtDay(dFrom)} → ${fmtDay(dTo || dFrom)}` : 'Sin fechas en el Inventario: se envía sin precio'}</span>}
           {attached.length > 0 && (
             <button type="button" className="link-btn" onClick={() => { setAttached([]); setDFrom(''); setDTo(''); }}>Quitar todas</button>
           )}
@@ -594,6 +617,8 @@ function ThreadDetail({ id, branches, members, cache, onBack, onStartAttach, att
           <div className="mail-preview">
             <div className="muted small">Así se ve lo adjuntado:</div>
             <pre>{attachedBlock}</pre>
+          <NoRateNote attached={attached} from={dFrom} to={dTo} />
+        <NoRateNote attached={attached} from={dFrom} to={dTo} />
           </div>
         )}
         <Button style={{ marginTop: 12 }} onClick={send} disabled={sending}>{sending ? 'Enviando…' : 'Enviar respuesta'}</Button>

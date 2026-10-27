@@ -60,6 +60,8 @@ function rangeStatus(p: Property, from: string, to: string): string {
 
 // Para buscar códigos sin importar guiones/espacios/mayúsculas: "av cas 72" == "AV-CAS-72".
 const normCode = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+/** Texto para buscar: minúsculas y sin tildes ("aguas verdes" encuentra "Aguas Verdés"). */
+const foldText = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
 const pad = (n: number) => String(n).padStart(2, '0');
 const fmtShort = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
@@ -167,7 +169,7 @@ export function PropertiesPanel({ branches, onChanged, preset, mailAttach, onSen
   /** Modo "elegir propiedades para adjuntar a un correo" (ver CorreoPanel → "Adjuntar
    *  propiedades"): mientras está activo, la barra de selección masiva cambia el botón
    *  "Compartir por WhatsApp" por "Enviar por correo". */
-  mailAttach?: boolean; onSendToMail?: (props: Property[]) => void; onCancelMailAttach?: () => void;
+  mailAttach?: boolean; onSendToMail?: (props: Property[], from: string, to: string) => void; onCancelMailAttach?: () => void;
 }) {
   const confirm = useConfirm();
   const [props, setProps] = useState<Property[]>([]);
@@ -260,7 +262,7 @@ export function PropertiesPanel({ branches, onChanged, preset, mailAttach, onSen
     if (!withUrl.length) { toast('Ninguna de esas propiedades tiene el link del aviso cargado', 'err'); return; }
     const skipped = list.length - withUrl.length;
     if (skipped) toast(`${skipped} sin link: no se ${skipped === 1 ? 'incluyó' : 'incluyeron'}`, 'ok');
-    onSendToMail?.(withUrl);
+    onSendToMail?.(withUrl, dFrom, dTo);
   }
   const bulkSendToMail = () => sendToMail(props.filter((p) => selected.has(p.id)));
 
@@ -275,7 +277,7 @@ export function PropertiesPanel({ branches, onChanged, preset, mailAttach, onSen
   const filtered = props.filter((p) => {
     // Archivadas ocultas por defecto (el toggle "Ver archivadas" invierte esto).
     if (f.archived ? !p.archived_at : !!p.archived_at) return false;
-    if (f.text) { const q = f.text.toLowerCase(); if (!(`${p.title} ${p.city || ''} ${p.code || ''}`.toLowerCase().includes(q) || (!!p.code && !!normCode(q) && normCode(p.code).includes(normCode(q))))) return false; }
+    if (f.text) { const q = foldText(f.text.trim()); if (!(foldText(`${p.title} ${p.address || ''} ${p.city || ''} ${p.code || ''}`).includes(q) || (!!p.code && !!normCode(q) && normCode(p.code).includes(normCode(q))))) return false; }
     // Matchea la operación principal O la secundaria (una temporario + venta sale en las dos).
     if (f.op && p.operation !== f.op && p.operation_secondary !== f.op) return false;
     // Con fechas puestas, "Disponible" habla DEL RANGO (ver `displayRows`), no del estado
@@ -414,7 +416,7 @@ export function PropertiesPanel({ branches, onChanged, preset, mailAttach, onSen
       <div className="psearch">
         <div className="psearch-field">
           <Search className="psearch-ic" />
-          <input placeholder="Buscar título / ciudad" value={f.text} onChange={(e) => set('text', e.target.value)} />
+          <input placeholder="Buscar título / dirección / código" value={f.text} onChange={(e) => set('text', e.target.value)} />
           {f.text && <button type="button" className="psearch-x" onClick={() => set('text', '')} aria-label="Limpiar búsqueda"><X className="h-4 w-4" /></button>}
         </div>
         <Button variant={f.archived ? 'secondary' : 'outline'} size="sm" onClick={() => setF((s) => ({ ...s, archived: !s.archived }))}>

@@ -51,6 +51,9 @@ export type Sub = {
 
 export type Branch = { id: number; name: string; address: string | null; phone: string | null };
 
+/** Propiedades elegidas en el Inventario para adjuntar a un mail + las fechas que tenía filtradas. */
+export type MailAttach = { props: Property[]; from: string; to: string };
+
 export type Property = {
   id: number;
   /** Operación principal (alquiler | venta | temporario). */
