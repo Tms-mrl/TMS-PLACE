@@ -16,6 +16,8 @@ import { contracts } from './routes/contracts';
 import { expenses } from './routes/expenses';
 import { favorites, savedSearches } from './routes/tenant';
 import { correo } from './routes/correo';
+import { activity } from './routes/activity';
+import { activityLog } from './lib/activity';
 import { runSavedSearchAlerts } from './lib/alerts';
 import { syncGmail } from './lib/gmail';
 
@@ -32,6 +34,7 @@ app.route('/api/public', publicApi); // /api/public/search · /api/public/proper
 
 // ── API privada (sesión SSO, modelo C) ──
 app.use('/api/*', requireUser);
+app.use('/api/*', activityLog); // registro de cambios (apartado "Registro")
 app.route('/api/profile', profile);
 app.route('/api/agencies', agencies);
 app.route('/api/properties', properties);
@@ -41,6 +44,7 @@ app.route('/api/contracts', contracts);
 app.route('/api/expenses', expenses);
 app.route('/api/favorites', favorites);
 app.route('/api/saved-searches', savedSearches);
+app.route('/api/activity', activity);
 app.route('/api/correo', correo); // apartado "Correo" — bandeja de equipo sobre Gmail
 
 app.onError((err, c) => serverError(c, err));

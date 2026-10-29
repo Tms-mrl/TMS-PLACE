@@ -15,6 +15,7 @@ import { FinancePanel } from './finance-panel';
 import { SettingsPanel } from './account-menu';
 import { CorreoPanel } from './correo-panel';
 import { CalendarioPanel } from './calendario-panel';
+import { ActivityPanel } from './activity-panel';
 import { toast } from '../lib/toast';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
@@ -28,7 +29,7 @@ const origin = typeof window !== 'undefined' ? window.location.origin : '';
 const accessUrl = (t: string | null) => (t ? `${origin}/i/${t}` : '');
 const copy = (t: string) => navigator.clipboard?.writeText(t).then(() => {}, () => {});
 
-export type Tab = 'resumen' | 'propiedades' | 'mapa' | 'clientes' | 'operaciones' | 'contratos' | 'finanzas' | 'consultas' | 'correo' | 'calendario' | 'sucursales' | 'equipo' | 'configuracion';
+export type Tab = 'resumen' | 'propiedades' | 'mapa' | 'clientes' | 'operaciones' | 'contratos' | 'finanzas' | 'consultas' | 'correo' | 'calendario' | 'sucursales' | 'equipo' | 'configuracion' | 'registro';
 const TABS: { k: Tab; label: string }[] = [
   { k: 'resumen', label: 'Resumen' },
   { k: 'propiedades', label: 'Propiedades' },
@@ -43,6 +44,7 @@ const TABS: { k: Tab; label: string }[] = [
   { k: 'sucursales', label: 'Sucursales' },
   { k: 'equipo', label: 'Equipo' },
   { k: 'configuracion', label: 'Configuración' },
+  { k: 'registro', label: 'Registro' },
 ];
 
 export function AgencyWorkspace({ agency, user, onLogout, tab, setTab }: {
@@ -67,6 +69,8 @@ export function AgencyWorkspace({ agency, user, onLogout, tab, setTab }: {
   const [mailAttaching, setMailAttaching] = useState(false);
   const [mailAttachResult, setMailAttachResult] = useState<MailAttach | null>(null);
   const visited = useVisited(tab);
+  // El Registro lo ve solo el admin/manager (o el super-admin): el server lo vuelve a exigir.
+  const canSeeLog = ['admin', 'manager'].includes(ag.role) || !!user.isSuperAdmin;
   // Salir de Propiedades sin elegir (click en otra pestaña, o el "atrás" del celu, que
   // vuelve a la pestaña anterior sin pasar por el onClick de arriba) cancela el modo adjuntar.
   useEffect(() => { if (mailAttaching && tab !== 'propiedades') setMailAttaching(false); }, [tab, mailAttaching]);
@@ -103,7 +107,7 @@ export function AgencyWorkspace({ agency, user, onLogout, tab, setTab }: {
         <MyBranchSelector branches={branches} branchId={myBranchId} onChanged={setMyBranchId} />
       </div>
       <nav className="tabs">
-        {TABS.map((t) => (
+        {TABS.filter((t) => t.k !== 'registro' || canSeeLog).map((t) => (
           <button key={t.k} className={tab === t.k ? 'tab active' : 'tab'} onClick={() => { setPreset(undefined); if (mailAttaching && t.k !== 'propiedades') setMailAttaching(false); setTab(t.k); }}>
             {t.label}
             {t.k === 'correo' && correoPending > 0 && <Badge variant="default" className="ml-1.5">{correoPending}</Badge>}
@@ -130,6 +134,7 @@ export function AgencyWorkspace({ agency, user, onLogout, tab, setTab }: {
       {visited.has('calendario') && <div hidden={tab !== 'calendario'}><CalendarioPanel myBranchId={myBranchId} /></div>}
       {visited.has('sucursales') && <div hidden={tab !== 'sucursales'}><BranchesPanel branches={branches} summary={summary} onChanged={() => { loadMine(); loadSummary(); }} /></div>}
       {visited.has('equipo') && <div hidden={tab !== 'equipo'}><TeamPanel branches={branches} /></div>}
+      {visited.has('registro') && canSeeLog && <div hidden={tab !== 'registro'}><ActivityPanel /></div>}
       {visited.has('configuracion') && <div hidden={tab !== 'configuracion'}><SettingsPanel user={user} onLogout={onLogout} agency={ag} onAgencySaved={loadMine} /></div>}
     </div>
   );
