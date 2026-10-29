@@ -1,10 +1,12 @@
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import type { AppEnv } from '../lib/types';
 import { bad, notFound, num, paymentRequired, str } from '../lib/http';
 import { getSubStatus, getUserAgency } from '../lib/subscription';
 import { parseArgenprop } from '../lib/argenprop';
 import { BOOKING_KINDS, COMPUTED_STATUS_SQL } from '../lib/propertyStatus';
 import { clientInAgency } from '../lib/ownership';
+import { moveToTrash, purgeExpiredTrash, purgeTrashEntry, restoreFromTrash } from '../lib/trash';
 
 // Cartera de propiedades de la inmobiliaria (no hay alta particular, ver POST /).
 export const properties = new Hono<AppEnv>();
@@ -291,7 +293,51 @@ properties.delete('/:id', async (c) => {
   if (id == null) return bad(c, 'id inválido');
   const prop = await loadManageable(c.env.DB, c.var.user.id, id);
   if (!prop) return notFound(c, 'Propiedad no encontrada');
-  await c.env.DB.prepare('DELETE FROM properties WHERE id = ?').bind(id).run();
+  // No se borra de verdad: va a la papelera 40 días con sus reservas, tarifas y fotos.
+  await moveToTrash(c.env, prop, { id: c.var.user.id, label: c.var.user.name || c.var.user.email });
+  return c.json({ success: true, trashed: true });
+});
+
+// ── Papelera: propiedades eliminadas, restaurables durante 40 días ──
+async function trashScope(c: Context<AppEnv>) {
+  const mine = await getUserAgency(c.env.DB, c.var.user.id);
+  return mine ? { agencyId: mine.agency.id, role: mine.role } : null;
+}
+
+properties.get('/trash/list', async (c) => {
+  const sc = await trashScope(c);
+  if (!sc) return c.json({ items: [] });
+  c.executionCtx.waitUntil(purgeExpiredTrash(c.env).catch(() => {}));
+  const rows = await c.env.DB
+    .prepare(
+      `SELECT id, property_id, title, code, deleted_at, purge_at, deleted_by, bookings_n, prices_n, photos_n,
+              CAST(MAX(0, julianday(purge_at) - julianday('now')) + 0.999 AS INTEGER) AS days_left
+       FROM trash_properties WHERE agency_id = ? AND purge_at > datetime('now') ORDER BY deleted_at DESC`,
+    )
+    .bind(sc.agencyId)
+    .all();
+  return c.json({ items: rows.results });
+});
+
+properties.post('/trash/:tid/restore', async (c) => {
+  const tid = num(c.req.param('tid'));
+  const sc = await trashScope(c);
+  if (tid == null || !sc) return bad(c, 'id inválido');
+  const own = await c.env.DB.prepare('SELECT 1 FROM trash_properties WHERE id = ? AND agency_id = ?').bind(tid, sc.agencyId).first();
+  if (!own) return notFound(c, 'No está en la papelera');
+  const r = await restoreFromTrash(c.env, tid);
+  return r.ok ? c.json({ success: true, property_id: r.propertyId }) : bad(c, r.error);
+});
+
+// Eliminar definitivamente (sin esperar los 40 días): solo admin/manager.
+properties.delete('/trash/:tid', async (c) => {
+  const tid = num(c.req.param('tid'));
+  const sc = await trashScope(c);
+  if (tid == null || !sc) return bad(c, 'id inválido');
+  if (!['admin', 'manager'].includes(sc.role)) return c.json({ error: 'Solo admin/manager', code: 'FORBIDDEN' }, 403);
+  const own = await c.env.DB.prepare('SELECT 1 FROM trash_properties WHERE id = ? AND agency_id = ?').bind(tid, sc.agencyId).first();
+  if (!own) return notFound(c, 'No está en la papelera');
+  await purgeTrashEntry(c.env, tid);
   return c.json({ success: true });
 });
 

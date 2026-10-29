@@ -52,11 +52,13 @@ function describe(method: string, path: string, noun: string | undefined, label:
   if (path.endsWith('/reply')) return { action: 'other', summary: 'Respondió un correo' };
   if (path.endsWith('/compose')) return { action: 'other', summary: 'Envió un correo nuevo' };
   if (path.endsWith('/disconnect')) return { action: 'other', summary: 'Desconectó la cuenta de Gmail' };
+  if (path.endsWith('/restore')) return { action: 'other', summary: 'Restauró una propiedad de la papelera' };
+  if (path.includes('/properties/trash/') && method === 'DELETE') return { action: 'delete', summary: 'Eliminó definitivamente una propiedad de la papelera' };
   if (path.endsWith('/copy')) return { action: 'create', summary: `Duplicó propiedad${who}` };
   if (path.endsWith('/import')) return { action: 'create', summary: 'Importó una propiedad desde un link' };
   const n = noun || 'registro';
   if (method === 'POST') return { action: 'create', summary: `Creó ${n}${who}` };
-  if (method === 'DELETE') return { action: 'delete', summary: `Eliminó ${n}${who}` };
+  if (method === 'DELETE') return { action: 'delete', summary: noun === NOUN.properties ? `Envió a la papelera propiedad${who}` : `Eliminó ${n}${who}` };
   return { action: 'update', summary: `Editó ${n}${who}` };
 }
 
@@ -80,15 +82,8 @@ export async function activityLog(c: Context<AppEnv>, next: Next) {
     }
     if (target && method !== 'POST') {
       before = await c.env.DB.prepare(`SELECT * FROM ${target.table} WHERE ${target.where}`).bind(...target.binds).first<Record<string, unknown>>();
-      if (method === 'DELETE' && before) {
-        snapshot = { [target.table]: before };
-        if (target.table === 'properties') {
-          for (const t of ['bookings', 'property_media', 'property_season_prices', 'mandates']) {
-            const r = await c.env.DB.prepare(`SELECT * FROM ${t} WHERE property_id = ?`).bind(target.binds[0]).all();
-            snapshot[t] = r.results;
-          }
-        }
-      }
+      // Las propiedades ya guardan su copia completa en la papelera: no se duplica acá.
+      if (method === 'DELETE' && before && target.table !== 'properties') snapshot = { [target.table]: before };
     }
   } catch { /* el registro es best-effort */ }
 

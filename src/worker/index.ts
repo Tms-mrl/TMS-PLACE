@@ -20,6 +20,7 @@ import { activity } from './routes/activity';
 import { activityLog } from './lib/activity';
 import { runSavedSearchAlerts } from './lib/alerts';
 import { syncGmail } from './lib/gmail';
+import { purgeExpiredTrash } from './lib/trash';
 
 // El Worker corre PRIMERO en toda request (run_worker_first=true en wrangler.toml):
 // - /api/*         → API JSON (pública o gateada por sesión SSO)
@@ -131,7 +132,10 @@ app.all('*', (c) => c.env.ASSETS.fetch(c.req.raw));
 // hasta que se setee INTERNAL_API_SECRET). "* * * * *" = sync de Correo cada 1 min
 // (no hace nada si todavía no se conectó la casilla, ver syncGmail en lib/gmail.ts).
 async function scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
-  if (event.cron === '0 13 * * *') ctx.waitUntil(runSavedSearchAlerts(env).catch(() => {}));
+  if (event.cron === '0 13 * * *') {
+    ctx.waitUntil(runSavedSearchAlerts(env).catch(() => {}));
+    ctx.waitUntil(purgeExpiredTrash(env).catch((e) => console.error('papelera', e))); // vacía lo que pasó los 40 días
+  }
   else ctx.waitUntil(syncGmail(env).catch((e) => console.error('correo sync', e)));
 }
 

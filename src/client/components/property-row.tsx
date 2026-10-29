@@ -95,7 +95,7 @@ export function PropertyRow({ p, index, expanded, checked, selectMode, selectedC
     catch (e) { toast(String((e as Error).message), 'err'); }
   }
   async function del() {
-    if (!(await confirm(`¿Eliminar "${p.title}"? No se puede deshacer.`, { destructive: true, confirmLabel: 'Eliminar' }))) return;
+    if (!(await confirm(`¿Eliminar "${p.title}"? Va a la Papelera y se puede restaurar durante 40 días.`, { destructive: true, confirmLabel: 'Eliminar' }))) return;
     try { await api(`/api/properties/${p.id}`, { method: 'DELETE' }); onReload(); }
     catch (e) { toast(String((e as Error).message), 'err'); }
   }

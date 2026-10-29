@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Calendar as CalendarIcon, ChevronLeft, ChevronRight, EyeOff,
-  Mail, Search, Share2, Tag, X,
+  Mail, Search, Share2, Tag, Trash2, X,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { cn } from '../lib/cn';
@@ -17,6 +17,7 @@ import { PhotoManager, PropertyForm } from './property-form';
 import { PropertyRow } from './property-row';
 import { SeasonPricesModal } from './season-prices-modal';
 import { StatsModal } from './stats-modal';
+import { TrashModal } from './trash-modal';
 import { Button } from './ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { useConfirm } from './ui/use-confirm';
@@ -175,6 +176,7 @@ export function PropertiesPanel({ branches, onChanged, preset, mailAttach, onSen
   const [props, setProps] = useState<Property[]>([]);
   const [managing, setManaging] = useState<Property | null>(null);
   const [showNew, setShowNew] = useState(false);
+  const [showTrash, setShowTrash] = useState(false);
   const [expanded, setExpanded] = useState<number | null>(null);
   const [lb, setLb] = useState<Media[] | null>(null);
   const [editing, setEditing] = useState<Property | null>(null);
@@ -229,7 +231,7 @@ export function PropertiesPanel({ branches, onChanged, preset, mailAttach, onSen
     setSelected(new Set()); reload();
   }
   async function bulkDelete() {
-    if (!(await confirm(`¿Eliminar ${selected.size} propiedad(es)? No se puede deshacer.`, { destructive: true, confirmLabel: 'Eliminar' }))) return;
+    if (!(await confirm(`¿Eliminar ${selected.size} propiedad(es)? Van a la Papelera y se pueden restaurar durante 40 días.`, { destructive: true, confirmLabel: 'Eliminar' }))) return;
     await Promise.all([...selected].map((id) => api(`/api/properties/${id}`, { method: 'DELETE' }).catch(() => {})));
     setSelected(new Set()); reload();
   }
@@ -422,6 +424,7 @@ export function PropertiesPanel({ branches, onChanged, preset, mailAttach, onSen
         <Button variant={f.archived ? 'secondary' : 'outline'} size="sm" onClick={() => setF((s) => ({ ...s, archived: !s.archived }))}>
           {f.archived ? 'Viendo archivadas' : 'Ver archivadas'}
         </Button>
+        <Button variant="outline" size="sm" onClick={() => setShowTrash(true)} title="Propiedades eliminadas: se pueden restaurar durante 40 días"><Trash2 className="h-4 w-4" />Papelera</Button>
         {dirty && <Button variant="ghost" size="sm" onClick={() => setF({ ...EMPTY_F })}><X className="h-4 w-4" />Limpiar</Button>}
       </div>
 
@@ -548,6 +551,7 @@ export function PropertiesPanel({ branches, onChanged, preset, mailAttach, onSen
           </div>
         </>
       )}
+      {showTrash && <TrashModal onClose={() => setShowTrash(false)} onRestored={reload} />}
       {showNew && <PropertyForm scope="agency" branches={branches} onClose={() => setShowNew(false)} onSaved={reload} />}
       {editing && <PropertyForm scope="agency" branches={branches} edit={editing} onClose={() => setEditing(null)} onSaved={reload} />}
       {managing && <PhotoManager property={managing} onClose={() => setManaging(null)} onSaved={reload} />}
