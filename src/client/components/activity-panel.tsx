@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { Button } from './ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+
+// Radix no permite value="" en un Item: se usa un centinela que nunca viaja al backend.
+const ALL = '_all';
 
 // Pestaña "Registro": quién cambió qué y cuándo (ver worker/lib/activity.ts). Solo lectura.
 // Las ediciones muestran "campo: antes → después"; los borrados guardan una copia de lo que
@@ -61,14 +65,23 @@ export function ActivityPanel() {
     <div>
       <div className="panel-head"><h3>Registro de actividad</h3></div>
       <p className="muted small" style={{ marginTop: 0 }}>Todo lo que cambia el equipo en el panel: quién, qué y cuándo. Los borrados guardan una copia de lo eliminado.</p>
-      <div className="row" style={{ gap: 8, flexWrap: 'wrap', margin: '10px 0' }}>
-        <select value={f.entity} onChange={(e) => setF({ ...f, entity: e.target.value })}>{ENTITIES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
-        <select value={f.action} onChange={(e) => setF({ ...f, action: e.target.value })}>{ACTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
-        <select value={f.user} onChange={(e) => setF({ ...f, user: e.target.value })}>
-          <option value="">Todos los usuarios</option>
-          {users.map((u) => <option key={u.user_id} value={u.user_id}>{u.user_label}</option>)}
-        </select>
-        <input placeholder="Buscar (ej. nombre de propiedad)" value={f.q} onChange={(e) => setF({ ...f, q: e.target.value })} style={{ minWidth: 220 }} />
+      <div className="filters pfilters">
+        <Select value={f.entity || ALL} onValueChange={(v) => setF({ ...f, entity: v === ALL ? '' : v })}>
+          <SelectTrigger className="w-auto min-w-[130px]"><SelectValue /></SelectTrigger>
+          <SelectContent>{ENTITIES.map(([v, l]) => <SelectItem key={v || ALL} value={v || ALL}>{l}</SelectItem>)}</SelectContent>
+        </Select>
+        <Select value={f.action || ALL} onValueChange={(v) => setF({ ...f, action: v === ALL ? '' : v })}>
+          <SelectTrigger className="w-auto min-w-[130px]"><SelectValue /></SelectTrigger>
+          <SelectContent>{ACTIONS.map(([v, l]) => <SelectItem key={v || ALL} value={v || ALL}>{l}</SelectItem>)}</SelectContent>
+        </Select>
+        <Select value={f.user || ALL} onValueChange={(v) => setF({ ...f, user: v === ALL ? '' : v })}>
+          <SelectTrigger className="w-auto min-w-[130px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>Todos los usuarios</SelectItem>
+            {users.map((u) => <SelectItem key={u.user_id} value={String(u.user_id)}>{u.user_label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <input placeholder="Buscar (ej. nombre de propiedad)" value={f.q} onChange={(e) => setF({ ...f, q: e.target.value })} style={{ minWidth: 240 }} />
       </div>
       {err && <p className="muted">{err}</p>}
       {!loading && !items.length && !err && <p className="muted">Todavía no hay actividad registrada con esos filtros.</p>}

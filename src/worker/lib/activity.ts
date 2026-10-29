@@ -45,7 +45,10 @@ function skip(method: string, path: string): boolean {
 }
 
 const cut = (v: unknown, n = 300) => (typeof v === 'string' && v.length > n ? v.slice(0, n) + '…' : v);
-const same = (a: unknown, b: unknown) => String(a ?? '') === String(b ?? '');
+// Listas/objetos (ej. comodidades) vienen del cliente como array y están en la base como
+// JSON: se comparan en la misma forma para no anotar un "cambio" donde no hubo ninguno.
+const norm = (v: unknown) => (v !== null && typeof v === 'object' ? JSON.stringify(v) : v);
+const same = (a: unknown, b: unknown) => String(norm(a) ?? '') === String(norm(b) ?? '');
 
 function describe(method: string, path: string, noun: string | undefined, label: string | null): { action: string; summary: string } {
   const who = label ? ` «${label}»` : '';
@@ -102,7 +105,7 @@ export async function activityLog(c: Context<AppEnv>, next: Next) {
     let changes: Record<string, [unknown, unknown]> | null = null;
     if (action === 'update' && before && body) {
       for (const k of Object.keys(body)) {
-        if (k in before && !same(before[k], body[k])) (changes ??= {})[k] = [cut(before[k]), cut(body[k])];
+        if (k in before && !same(before[k], body[k])) (changes ??= {})[k] = [cut(norm(before[k])), cut(norm(body[k]))];
       }
     }
     const entity = target?.table ?? path.replace(/^\/api\//, '').split('/')[0] ?? null;

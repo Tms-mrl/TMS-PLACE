@@ -150,6 +150,16 @@ upsert del user, abre sesión propia en D1 — cookie `places_session`, 30 días
 Todo `/api/*` salvo `/api/auth/*` y las rutas públicas del marketplace exige
 `requireUser`.
 
+## UI: usar los componentes y estilos que ya existen
+
+Al crear pantallas nuevas NO usar `<select>`, `<input type="date">` ni botones HTML pelados
+(salen cuadrados, sin color y con el azul de Windows). Usar lo que ya tiene la app:
+`components/ui/` (`Select`/`SelectItem` de Radix — sin `value=""`, usar un centinela como
+`ALL = '_all'` —, `Button`, `Badge`, `Card`, `use-confirm`), `DateRangePicker` para fechas,
+`Modal` de `property-form.tsx`, y las clases de `styles.css` (`.filters .pfilters`, `.panel-head`,
+`.client-card`, `.chip`, `.panel-lite`, `--accent/--warn/--err`). Copiar la barra de filtros de
+`properties-panel.tsx` como modelo. Verificar con una captura antes de dar por terminado.
+
 ## Gotchas
 
 - 🔴🔴 **NUNCA correr un recorrido automatizado con CLICKS contra producción**
