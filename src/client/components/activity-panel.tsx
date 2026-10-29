@@ -91,8 +91,8 @@ export function ActivityPanel() {
           return (
             <div className="client-card" key={it.id} style={{ alignItems: 'flex-start' }}>
               <div className="client-main">
-                <div className="client-name"><span className={`chip ${CHIP[it.action] || ''}`}>{ACTIONS.find((a) => a[0] === it.action)?.[1] || it.action}</span> {it.summary}</div>
-                <div className="muted small">{it.user_label || 'Usuario'} · {when(it.created_at)}</div>
+                <div className="client-name"><span className={`chip ${CHIP[it.action] || ''}`}>{ACTIONS.find((a) => a[0] === it.action)?.[1] || it.action}</span> {it.summary} <span className="muted">· por <b>{(it.user_label || 'Usuario').replace(/\s*<.*>$/, '')}</b></span></div>
+                <div className="muted small">{when(it.created_at)}</div>
                 {ch && (
                   <ul className="small" style={{ margin: '6px 0 0', paddingLeft: 18 }}>
                     {Object.entries(ch).map(([k, [a, b]]) => (
